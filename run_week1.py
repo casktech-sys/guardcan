@@ -2,9 +2,10 @@
 
     python run_week1.py
 
-Runs end-to-end on CPU with the scikit-learn fallback, so you can confirm the pipeline before
-downloading the real dataset or opening Colab. For the real dataset, call the three modules with
---data data/car-hacking (see README).
+Uses PyTorch (on the GPU if available) when torch is installed, otherwise the scikit-learn fallback,
+so you can confirm the pipeline before downloading the real dataset or opening Colab. Both backends
+train for the train_autoencoder default of 200 epochs. For the real dataset, call the three modules
+with --data data/car-hacking (see README).
 """
 import os
 import sys
@@ -26,7 +27,7 @@ def main():
     from model import train_autoencoder, train_classifier, eval as eval_mod
 
     print("\n== train autoencoder ==")
-    train_autoencoder.main(["--data", synth, "--out", models, "--backend", "auto", "--epochs", "30"])
+    train_autoencoder.main(["--data", synth, "--out", models, "--backend", "auto"])   # default --epochs 200
 
     print("\n== train classifier ==")
     train_classifier.main(["--data", synth, "--out", models])

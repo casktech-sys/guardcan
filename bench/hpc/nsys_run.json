@@ -1,0 +1,107 @@
+{
+  "benchmark": "infer_streams",
+  "device": {
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "compute_capability": "8.9",
+    "sm_count": 24,
+    "global_mem_gb": 8.58522,
+    "cuda_driver_version": 13010,
+    "cuda_runtime_version": 13010,
+    "async_engine_count": 1,
+    "concurrent_managed_access": 0,
+    "pageable_memory_access": 0,
+    "can_map_host_memory": 1,
+    "host_cpu": "Intel(R) Core(TM) i7-14650HX",
+    "platform": "WSL2 (Linux on Windows, GPU via WDDM paravirtualization)"
+  },
+  "weights": "../models/ae_weights.npz",
+  "model_params": 1022,
+  "threads_per_block": 128,
+  "input": "reference feature vectors (held-out test split) replayed cyclically through a pinned ring",
+  "ring_frames": 1048576,
+  "bytes_per_frame_in": 88,
+  "bytes_per_frame_out": 4,
+  "latency_definition": "per micro-batch, CUDA events on the batch's stream: before H2D -> after D2H",
+  "throughput_definition": "frames / wall clock of the event-free pass, median over reps (latency comes from a second, instrumented pass; samples pooled over reps)",
+  "scheduling": "interleaved: each rep runs every configuration once, in a shuffled (seeded) order",
+  "percentile_method": "nearest-rank",
+  "gpu_clocks_note": "NVML samples every 50 ms during each config; clocks are driver-managed (not locked)",
+  "verify": {
+    "frames": 20903,
+    "max_abs_diff": 0.00390625,
+    "max_rel_diff": 3.99951e-06,
+    "out_of_tolerance": 0,
+    "decision_flips": 0,
+    "pass": true
+  },
+  "sweep": [
+    {
+      "order": "depth-first",
+      "streams": 4,
+      "batch": 4096,
+      "batches_per_rep": 200,
+      "reps": 1,
+      "frames_per_rep": 819200,
+      "frames_per_s_median": 3.4389e+07,
+      "frames_per_s_min": 3.4389e+07,
+      "frames_per_s_max": 3.4389e+07,
+      "frames_per_s_reps": [
+        3.4389e+07
+      ],
+      "h2d_gb_per_s_median": 3.02623,
+      "frames_per_s_with_events_median": 2.58834e+07,
+      "batch_latency_us": {
+        "n": 200,
+        "mean": 145.239,
+        "min": 104.352,
+        "p50": 142.944,
+        "p90": 176.864,
+        "p99": 190.016,
+        "p99_9": 210.624,
+        "max": 210.624
+      },
+      "gpu_clocks": {
+        "samples": 2,
+        "sm_clock_mhz_median": 2250,
+        "mem_clock_mhz_median": 8000,
+        "pstate_mode": "P0",
+        "pstate_mode_fraction": 1,
+        "gpu_util_pct_median": 10
+      }
+    },
+    {
+      "order": "breadth-first",
+      "streams": 4,
+      "batch": 4096,
+      "batches_per_rep": 200,
+      "reps": 1,
+      "frames_per_rep": 819200,
+      "frames_per_s_median": 5.12044e+07,
+      "frames_per_s_min": 5.12044e+07,
+      "frames_per_s_max": 5.12044e+07,
+      "frames_per_s_reps": [
+        5.12044e+07
+      ],
+      "h2d_gb_per_s_median": 4.50598,
+      "frames_per_s_with_events_median": 4.05553e+07,
+      "batch_latency_us": {
+        "n": 200,
+        "mean": 271.272,
+        "min": 157.216,
+        "p50": 268.864,
+        "p90": 336.608,
+        "p99": 416.352,
+        "p99_9": 452.576,
+        "max": 452.576
+      },
+      "gpu_clocks": {
+        "samples": 2,
+        "sm_clock_mhz_median": 2250,
+        "mem_clock_mhz_median": 8000,
+        "pstate_mode": "P0",
+        "pstate_mode_fraction": 1,
+        "gpu_util_pct_median": 10
+      }
+    }
+  ]
+}

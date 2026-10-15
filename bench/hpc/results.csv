@@ -1,0 +1,306 @@
+section,config,metric,value
+verify,"current model (verify.json, threshold 0.081815)",max_abs_diff,1.96695e-06
+verify,"current model (verify.json, threshold 0.081815)",max_rel_diff,7.94149e-06
+verify,"current model (verify.json, threshold 0.081815)",out_of_tolerance,0
+verify,"current model (verify.json, threshold 0.081815)",decision_flips,0
+verify,weights used by the timing runs (infer_streams.json),max_abs_diff,0.00390625
+verify,weights used by the timing runs (infer_streams.json),max_rel_diff,3.99951e-06
+verify,weights used by the timing runs (infer_streams.json),out_of_tolerance,0
+verify,weights used by the timing runs (infer_streams.json),decision_flips,0
+mem_throughput,pageable B=1024,frames_per_s_median,15934800.0
+mem_throughput,pageable B=1024,frames_per_s_min,15082500.0
+mem_throughput,pageable B=1024,frames_per_s_max,17262300.0
+mem_throughput,pageable B=4096,frames_per_s_median,38769300.0
+mem_throughput,pageable B=4096,frames_per_s_min,38144000.0
+mem_throughput,pageable B=4096,frames_per_s_max,38885800.0
+mem_throughput,pageable B=16384,frames_per_s_median,46201100.0
+mem_throughput,pageable B=16384,frames_per_s_min,45988600.0
+mem_throughput,pageable B=16384,frames_per_s_max,48605900.0
+mem_throughput,pageable B=65536,frames_per_s_median,51846400.0
+mem_throughput,pageable B=65536,frames_per_s_min,51582600.0
+mem_throughput,pageable B=65536,frames_per_s_max,52115700.0
+mem_throughput,pinned B=1024,frames_per_s_median,25706000.0
+mem_throughput,pinned B=1024,frames_per_s_min,25372100.0
+mem_throughput,pinned B=1024,frames_per_s_max,27115300.0
+mem_throughput,pinned B=4096,frames_per_s_median,64481400.0
+mem_throughput,pinned B=4096,frames_per_s_min,64427200.0
+mem_throughput,pinned B=4096,frames_per_s_max,65520900.0
+mem_throughput,pinned B=16384,frames_per_s_median,90728200.0
+mem_throughput,pinned B=16384,frames_per_s_min,88710400.0
+mem_throughput,pinned B=16384,frames_per_s_max,92675100.0
+mem_throughput,pinned B=65536,frames_per_s_median,104026000.0
+mem_throughput,pinned B=65536,frames_per_s_min,103434000.0
+mem_throughput,pinned B=65536,frames_per_s_max,104751000.0
+mem_throughput,zero-copy B=1024,frames_per_s_median,62939700.0
+mem_throughput,zero-copy B=1024,frames_per_s_min,61262600.0
+mem_throughput,zero-copy B=1024,frames_per_s_max,63060600.0
+mem_throughput,zero-copy B=4096,frames_per_s_median,77303400.0
+mem_throughput,zero-copy B=4096,frames_per_s_min,76709800.0
+mem_throughput,zero-copy B=4096,frames_per_s_max,83647600.0
+mem_throughput,zero-copy B=16384,frames_per_s_median,77741600.0
+mem_throughput,zero-copy B=16384,frames_per_s_min,77010800.0
+mem_throughput,zero-copy B=16384,frames_per_s_max,82457100.0
+mem_throughput,zero-copy B=65536,frames_per_s_median,90111700.0
+mem_throughput,zero-copy B=65536,frames_per_s_min,86062800.0
+mem_throughput,zero-copy B=65536,frames_per_s_max,92871000.0
+mem_throughput,zero-copy+wc B=1024,frames_per_s_median,62269800.0
+mem_throughput,zero-copy+wc B=1024,frames_per_s_min,59943600.0
+mem_throughput,zero-copy+wc B=1024,frames_per_s_max,63496700.0
+mem_throughput,zero-copy+wc B=4096,frames_per_s_median,83671000.0
+mem_throughput,zero-copy+wc B=4096,frames_per_s_min,80414500.0
+mem_throughput,zero-copy+wc B=4096,frames_per_s_max,85245000.0
+mem_throughput,zero-copy+wc B=16384,frames_per_s_median,79434200.0
+mem_throughput,zero-copy+wc B=16384,frames_per_s_min,79243700.0
+mem_throughput,zero-copy+wc B=16384,frames_per_s_max,80666600.0
+mem_throughput,zero-copy+wc B=65536,frames_per_s_median,90315300.0
+mem_throughput,zero-copy+wc B=65536,frames_per_s_min,88318400.0
+mem_throughput,zero-copy+wc B=65536,frames_per_s_max,97321500.0
+mem_throughput,unified B=1024,frames_per_s_median,29760000.0
+mem_throughput,unified B=1024,frames_per_s_min,26016700.0
+mem_throughput,unified B=1024,frames_per_s_max,30341500.0
+mem_throughput,unified B=4096,frames_per_s_median,61953500.0
+mem_throughput,unified B=4096,frames_per_s_min,61619300.0
+mem_throughput,unified B=4096,frames_per_s_max,63128500.0
+mem_throughput,unified B=16384,frames_per_s_median,85288400.0
+mem_throughput,unified B=16384,frames_per_s_min,85068800.0
+mem_throughput,unified B=16384,frames_per_s_max,86120700.0
+mem_throughput,unified B=65536,frames_per_s_median,91551200.0
+mem_throughput,unified B=65536,frames_per_s_min,90757900.0
+mem_throughput,unified B=65536,frames_per_s_max,95900800.0
+mem_latency_e2e_us,pageable B=1,p50,121.322
+mem_latency_e2e_us,pageable B=1,p99,293.83
+mem_latency_e2e_us,pageable B=1,p99_9,490.746
+mem_latency_e2e_us,pageable B=1,max,1037.86
+mem_latency_e2e_us,pinned B=1,p50,110.392
+mem_latency_e2e_us,pinned B=1,p99,254.585
+mem_latency_e2e_us,pinned B=1,p99_9,460.623
+mem_latency_e2e_us,pinned B=1,max,1114.83
+mem_latency_e2e_us,zero-copy B=1,p50,44.207
+mem_latency_e2e_us,zero-copy B=1,p99,129.239
+mem_latency_e2e_us,zero-copy B=1,p99_9,292.348
+mem_latency_e2e_us,zero-copy B=1,max,795.569
+mem_latency_e2e_us,zero-copy+wc B=1,p50,45.063
+mem_latency_e2e_us,zero-copy+wc B=1,p99,134.134
+mem_latency_e2e_us,zero-copy+wc B=1,p99_9,330.317
+mem_latency_e2e_us,zero-copy+wc B=1,max,967.031
+mem_latency_e2e_us,unified B=1,p50,50.258
+mem_latency_e2e_us,unified B=1,p99,170.102
+mem_latency_e2e_us,unified B=1,p99_9,317.059
+mem_latency_e2e_us,unified B=1,max,969.008
+mem_latency_e2e_us,pageable B=64,p50,126.564
+mem_latency_e2e_us,pageable B=64,p99,296.018
+mem_latency_e2e_us,pageable B=64,p99_9,494.602
+mem_latency_e2e_us,pageable B=64,max,1118.34
+mem_latency_e2e_us,pinned B=64,p50,108.207
+mem_latency_e2e_us,pinned B=64,p99,258.483
+mem_latency_e2e_us,pinned B=64,p99_9,458.496
+mem_latency_e2e_us,pinned B=64,max,898.8
+mem_latency_e2e_us,zero-copy B=64,p50,47.572
+mem_latency_e2e_us,zero-copy B=64,p99,140.773
+mem_latency_e2e_us,zero-copy B=64,p99_9,317.753
+mem_latency_e2e_us,zero-copy B=64,max,988.624
+mem_latency_e2e_us,zero-copy+wc B=64,p50,46.144
+mem_latency_e2e_us,zero-copy+wc B=64,p99,138.433
+mem_latency_e2e_us,zero-copy+wc B=64,p99_9,319.8
+mem_latency_e2e_us,zero-copy+wc B=64,max,835.59
+mem_latency_e2e_us,unified B=64,p50,51.122
+mem_latency_e2e_us,unified B=64,p99,177.39
+mem_latency_e2e_us,unified B=64,p99_9,329.695
+mem_latency_e2e_us,unified B=64,max,758.797
+mem_latency_e2e_us,pageable B=1024,p50,143.417
+mem_latency_e2e_us,pageable B=1024,p99,321.612
+mem_latency_e2e_us,pageable B=1024,p99_9,581.581
+mem_latency_e2e_us,pageable B=1024,max,1535.36
+mem_latency_e2e_us,pinned B=1024,p50,120.461
+mem_latency_e2e_us,pinned B=1024,p99,302.486
+mem_latency_e2e_us,pinned B=1024,p99_9,627.466
+mem_latency_e2e_us,pinned B=1024,max,1045.19
+mem_latency_e2e_us,zero-copy B=1024,p50,61.323
+mem_latency_e2e_us,zero-copy B=1024,p99,191.389
+mem_latency_e2e_us,zero-copy B=1024,p99_9,342.928
+mem_latency_e2e_us,zero-copy B=1024,max,897.927
+mem_latency_e2e_us,zero-copy+wc B=1024,p50,62.25
+mem_latency_e2e_us,zero-copy+wc B=1024,p99,170.348
+mem_latency_e2e_us,zero-copy+wc B=1024,p99_9,377.049
+mem_latency_e2e_us,zero-copy+wc B=1024,max,798.005
+mem_latency_e2e_us,unified B=1024,p50,65.219
+mem_latency_e2e_us,unified B=1024,p99,210.767
+mem_latency_e2e_us,unified B=1024,p99_9,413.666
+mem_latency_e2e_us,unified B=1024,max,4613.32
+mem_latency_e2e_us,pageable B=16384,p50,418.493
+mem_latency_e2e_us,pageable B=16384,p99,701.515
+mem_latency_e2e_us,pageable B=16384,p99_9,1046.54
+mem_latency_e2e_us,pageable B=16384,max,6830.11
+mem_latency_e2e_us,pinned B=16384,p50,379.461
+mem_latency_e2e_us,pinned B=16384,p99,626.049
+mem_latency_e2e_us,pinned B=16384,p99_9,906.65
+mem_latency_e2e_us,pinned B=16384,max,8297.77
+mem_latency_e2e_us,zero-copy B=16384,p50,333.419
+mem_latency_e2e_us,zero-copy B=16384,p99,572.172
+mem_latency_e2e_us,zero-copy B=16384,p99_9,912.437
+mem_latency_e2e_us,zero-copy B=16384,max,1341.57
+mem_latency_e2e_us,zero-copy+wc B=16384,p50,342.265
+mem_latency_e2e_us,zero-copy+wc B=16384,p99,559.967
+mem_latency_e2e_us,zero-copy+wc B=16384,p99_9,877.12
+mem_latency_e2e_us,zero-copy+wc B=16384,max,1387.41
+mem_latency_e2e_us,unified B=16384,p50,356.982
+mem_latency_e2e_us,unified B=16384,p99,597.936
+mem_latency_e2e_us,unified B=16384,p99_9,1042.65
+mem_latency_e2e_us,unified B=16384,max,2758.12
+stream_sweep,depth-first S=1 B=256,frames_per_s_median,757911
+stream_sweep_latency_us,depth-first S=1 B=256,p50,200.384
+stream_sweep_latency_us,depth-first S=1 B=256,p99,385.504
+stream_sweep_latency_us,depth-first S=1 B=256,p99_9,1056
+stream_sweep,depth-first S=2 B=256,frames_per_s_median,715694
+stream_sweep_latency_us,depth-first S=2 B=256,p50,224.032
+stream_sweep_latency_us,depth-first S=2 B=256,p99,845.536
+stream_sweep_latency_us,depth-first S=2 B=256,p99_9,1066.75
+stream_sweep,depth-first S=4 B=256,frames_per_s_median,857807
+stream_sweep_latency_us,depth-first S=4 B=256,p50,221.408
+stream_sweep_latency_us,depth-first S=4 B=256,p99,769.28
+stream_sweep_latency_us,depth-first S=4 B=256,p99_9,1016.64
+stream_sweep,depth-first S=8 B=256,frames_per_s_median,3235240.0
+stream_sweep_latency_us,depth-first S=8 B=256,p50,85.504
+stream_sweep_latency_us,depth-first S=8 B=256,p99,306.592
+stream_sweep_latency_us,depth-first S=8 B=256,p99_9,1043.1
+stream_sweep,depth-first S=1 B=1024,frames_per_s_median,3367410.0
+stream_sweep_latency_us,depth-first S=1 B=1024,p50,178.496
+stream_sweep_latency_us,depth-first S=1 B=1024,p99,414.496
+stream_sweep_latency_us,depth-first S=1 B=1024,p99_9,748.768
+stream_sweep,depth-first S=2 B=1024,frames_per_s_median,3162930.0
+stream_sweep_latency_us,depth-first S=2 B=1024,p50,245.856
+stream_sweep_latency_us,depth-first S=2 B=1024,p99,501.44
+stream_sweep_latency_us,depth-first S=2 B=1024,p99_9,775.36
+stream_sweep,depth-first S=4 B=1024,frames_per_s_median,3423790.0
+stream_sweep_latency_us,depth-first S=4 B=1024,p50,210.496
+stream_sweep_latency_us,depth-first S=4 B=1024,p99,576.768
+stream_sweep_latency_us,depth-first S=4 B=1024,p99_9,887.104
+stream_sweep,depth-first S=8 B=1024,frames_per_s_median,3239820.0
+stream_sweep_latency_us,depth-first S=8 B=1024,p50,237.696
+stream_sweep_latency_us,depth-first S=8 B=1024,p99,520.48
+stream_sweep_latency_us,depth-first S=8 B=1024,p99_9,793.28
+stream_sweep,depth-first S=1 B=4096,frames_per_s_median,10525800.0
+stream_sweep_latency_us,depth-first S=1 B=4096,p50,160.672
+stream_sweep_latency_us,depth-first S=1 B=4096,p99,385.056
+stream_sweep_latency_us,depth-first S=1 B=4096,p99_9,616.416
+stream_sweep,depth-first S=2 B=4096,frames_per_s_median,11995200.0
+stream_sweep_latency_us,depth-first S=2 B=4096,p50,160.288
+stream_sweep_latency_us,depth-first S=2 B=4096,p99,461.696
+stream_sweep_latency_us,depth-first S=2 B=4096,p99_9,663.104
+stream_sweep,depth-first S=4 B=4096,frames_per_s_median,11144800.0
+stream_sweep_latency_us,depth-first S=4 B=4096,p50,153.856
+stream_sweep_latency_us,depth-first S=4 B=4096,p99,396.064
+stream_sweep_latency_us,depth-first S=4 B=4096,p99_9,583.136
+stream_sweep,depth-first S=8 B=4096,frames_per_s_median,10431700.0
+stream_sweep_latency_us,depth-first S=8 B=4096,p50,206.656
+stream_sweep_latency_us,depth-first S=8 B=4096,p99,440.512
+stream_sweep_latency_us,depth-first S=8 B=4096,p99_9,630.848
+stream_sweep,depth-first S=1 B=16384,frames_per_s_median,47795700.0
+stream_sweep_latency_us,depth-first S=1 B=16384,p50,247.328
+stream_sweep_latency_us,depth-first S=1 B=16384,p99,367.968
+stream_sweep_latency_us,depth-first S=1 B=16384,p99_9,464.384
+stream_sweep,depth-first S=2 B=16384,frames_per_s_median,49589600.0
+stream_sweep_latency_us,depth-first S=2 B=16384,p50,245.696
+stream_sweep_latency_us,depth-first S=2 B=16384,p99,352.608
+stream_sweep_latency_us,depth-first S=2 B=16384,p99_9,431.744
+stream_sweep,depth-first S=4 B=16384,frames_per_s_median,46010600.0
+stream_sweep_latency_us,depth-first S=4 B=16384,p50,245.664
+stream_sweep_latency_us,depth-first S=4 B=16384,p99,416.224
+stream_sweep_latency_us,depth-first S=4 B=16384,p99_9,570.24
+stream_sweep,depth-first S=8 B=16384,frames_per_s_median,47011400.0
+stream_sweep_latency_us,depth-first S=8 B=16384,p50,245.536
+stream_sweep_latency_us,depth-first S=8 B=16384,p99,392.768
+stream_sweep_latency_us,depth-first S=8 B=16384,p99_9,477.76
+stream_sweep,depth-first S=1 B=65536,frames_per_s_median,92114400.0
+stream_sweep_latency_us,depth-first S=1 B=65536,p50,621.792
+stream_sweep_latency_us,depth-first S=1 B=65536,p99,882.656
+stream_sweep_latency_us,depth-first S=1 B=65536,p99_9,1005.92
+stream_sweep,depth-first S=2 B=65536,frames_per_s_median,85805200.0
+stream_sweep_latency_us,depth-first S=2 B=65536,p50,608.224
+stream_sweep_latency_us,depth-first S=2 B=65536,p99,890.08
+stream_sweep_latency_us,depth-first S=2 B=65536,p99_9,1001.5
+stream_sweep,depth-first S=4 B=65536,frames_per_s_median,95950900.0
+stream_sweep_latency_us,depth-first S=4 B=65536,p50,616.192
+stream_sweep_latency_us,depth-first S=4 B=65536,p99,795.424
+stream_sweep_latency_us,depth-first S=4 B=65536,p99_9,980.48
+stream_sweep,depth-first S=8 B=65536,frames_per_s_median,90309900.0
+stream_sweep_latency_us,depth-first S=8 B=65536,p50,636.352
+stream_sweep_latency_us,depth-first S=8 B=65536,p99,1017.44
+stream_sweep_latency_us,depth-first S=8 B=65536,p99_9,1097.02
+stream_sweep,breadth-first S=2 B=256,frames_per_s_median,4009020.0
+stream_sweep_latency_us,breadth-first S=2 B=256,p50,133.76
+stream_sweep_latency_us,breadth-first S=2 B=256,p99,272.896
+stream_sweep_latency_us,breadth-first S=2 B=256,p99_9,500.16
+stream_sweep,breadth-first S=4 B=256,frames_per_s_median,8175240.0
+stream_sweep_latency_us,breadth-first S=4 B=256,p50,118.4
+stream_sweep_latency_us,breadth-first S=4 B=256,p99,280
+stream_sweep_latency_us,breadth-first S=4 B=256,p99_9,415.424
+stream_sweep,breadth-first S=8 B=256,frames_per_s_median,7892790.0
+stream_sweep_latency_us,breadth-first S=8 B=256,p50,263.232
+stream_sweep_latency_us,breadth-first S=8 B=256,p99,516.608
+stream_sweep_latency_us,breadth-first S=8 B=256,p99_9,615.36
+stream_sweep,breadth-first S=2 B=1024,frames_per_s_median,5940720.0
+stream_sweep_latency_us,breadth-first S=2 B=1024,p50,137.152
+stream_sweep_latency_us,breadth-first S=2 B=1024,p99,355.136
+stream_sweep_latency_us,breadth-first S=2 B=1024,p99_9,644.992
+stream_sweep,breadth-first S=4 B=1024,frames_per_s_median,29303600.0
+stream_sweep_latency_us,breadth-first S=4 B=1024,p50,102.432
+stream_sweep_latency_us,breadth-first S=4 B=1024,p99,262.496
+stream_sweep_latency_us,breadth-first S=4 B=1024,p99_9,392.928
+stream_sweep,breadth-first S=8 B=1024,frames_per_s_median,29869400.0
+stream_sweep_latency_us,breadth-first S=8 B=1024,p50,238.496
+stream_sweep_latency_us,breadth-first S=8 B=1024,p99,451.264
+stream_sweep_latency_us,breadth-first S=8 B=1024,p99_9,575.584
+stream_sweep,breadth-first S=2 B=4096,frames_per_s_median,39931900.0
+stream_sweep_latency_us,breadth-first S=2 B=4096,p50,142.016
+stream_sweep_latency_us,breadth-first S=2 B=4096,p99,257.216
+stream_sweep_latency_us,breadth-first S=2 B=4096,p99_9,399.584
+stream_sweep,breadth-first S=4 B=4096,frames_per_s_median,70338700.0
+stream_sweep_latency_us,breadth-first S=4 B=4096,p50,208.32
+stream_sweep_latency_us,breadth-first S=4 B=4096,p99,389.312
+stream_sweep_latency_us,breadth-first S=4 B=4096,p99_9,478.016
+stream_sweep,breadth-first S=8 B=4096,frames_per_s_median,84293900.0
+stream_sweep_latency_us,breadth-first S=8 B=4096,p50,266.88
+stream_sweep_latency_us,breadth-first S=8 B=4096,p99,604.544
+stream_sweep_latency_us,breadth-first S=8 B=4096,p99_9,717.408
+stream_sweep,breadth-first S=2 B=16384,frames_per_s_median,60123700.0
+stream_sweep_latency_us,breadth-first S=2 B=16384,p50,371.072
+stream_sweep_latency_us,breadth-first S=2 B=16384,p99,560.832
+stream_sweep_latency_us,breadth-first S=2 B=16384,p99_9,684.832
+stream_sweep,breadth-first S=4 B=16384,frames_per_s_median,93704600.0
+stream_sweep_latency_us,breadth-first S=4 B=16384,p50,358.944
+stream_sweep_latency_us,breadth-first S=4 B=16384,p99,531.04
+stream_sweep_latency_us,breadth-first S=4 B=16384,p99_9,688.096
+stream_sweep,breadth-first S=8 B=16384,frames_per_s_median,117924000.0
+stream_sweep_latency_us,breadth-first S=8 B=16384,p50,604.032
+stream_sweep_latency_us,breadth-first S=8 B=16384,p99,968
+stream_sweep_latency_us,breadth-first S=8 B=16384,p99_9,1001.7
+stream_sweep,breadth-first S=2 B=65536,frames_per_s_median,112772000.0
+stream_sweep_latency_us,breadth-first S=2 B=65536,p50,916.288
+stream_sweep_latency_us,breadth-first S=2 B=65536,p99,1023.39
+stream_sweep_latency_us,breadth-first S=2 B=65536,p99_9,1182.37
+stream_sweep,breadth-first S=4 B=65536,frames_per_s_median,125631000.0
+stream_sweep_latency_us,breadth-first S=4 B=65536,p50,1385.54
+stream_sweep_latency_us,breadth-first S=4 B=65536,p99,1870.27
+stream_sweep_latency_us,breadth-first S=4 B=65536,p99_9,1921.66
+stream_sweep,breadth-first S=8 B=65536,frames_per_s_median,110497000.0
+stream_sweep_latency_us,breadth-first S=8 B=65536,p50,2080.77
+stream_sweep_latency_us,breadth-first S=8 B=65536,p99,3666.91
+stream_sweep_latency_us,breadth-first S=8 B=65536,p99_9,3760.1
+kernel_only,sustained (kernel_only.json),frames_per_s_at_p50,2497560000.0
+kernel_only,sync (kernel_only.json),frames_per_s_at_p50,2332570000.0
+kernel_only,sync (end of the sweep run),frames_per_s_at_p50,1458690000.0
+cpu_baseline,scalar,frames_per_s_median,3724910.0
+cpu_baseline,simd,frames_per_s_median,30857700.0
+nsys,depth-first S=4 B=4096,us_per_batch,138.490925
+nsys,depth-first S=4 B=4096,gpu_busy_fraction,0.2770626125863482
+nsys,depth-first S=4 B=4096,copy_busy_fraction,0.23431282591260041
+nsys,depth-first S=4 B=4096,kernel_time_overlapping_copy_fraction,0.0
+nsys,depth-first S=4 B=4096,median_gap_h2d_to_kernel_us,36.83
+nsys,depth-first S=4 B=4096,median_gap_kernel_to_d2h_us,32.702
+nsys,breadth-first S=4 B=4096,us_per_batch,90.20361999999999
+nsys,breadth-first S=4 B=4096,gpu_busy_fraction,0.4193388247611349
+nsys,breadth-first S=4 B=4096,copy_busy_fraction,0.36140140495470136
+nsys,breadth-first S=4 B=4096,kernel_time_overlapping_copy_fraction,0.14922378367943448
+nsys,breadth-first S=4 B=4096,median_gap_h2d_to_kernel_us,98.458
+nsys,breadth-first S=4 B=4096,median_gap_kernel_to_d2h_us,85.851

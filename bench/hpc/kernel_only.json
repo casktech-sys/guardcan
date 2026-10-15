@@ -1,0 +1,89 @@
+{
+  "benchmark": "infer_streams",
+  "device": {
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "compute_capability": "8.9",
+    "sm_count": 24,
+    "global_mem_gb": 8.58522,
+    "cuda_driver_version": 13010,
+    "cuda_runtime_version": 13010,
+    "async_engine_count": 1,
+    "concurrent_managed_access": 0,
+    "pageable_memory_access": 0,
+    "can_map_host_memory": 1,
+    "host_cpu": "Intel(R) Core(TM) i7-14650HX",
+    "platform": "WSL2 (Linux on Windows, GPU via WDDM paravirtualization)"
+  },
+  "weights": "models/ae_weights.npz",
+  "model_params": 1022,
+  "threads_per_block": 128,
+  "input": "reference feature vectors (held-out test split) replayed cyclically through a pinned ring",
+  "ring_frames": 1048576,
+  "bytes_per_frame_in": 88,
+  "bytes_per_frame_out": 4,
+  "latency_definition": "per micro-batch, CUDA events on the batch's stream: before H2D -> after D2H",
+  "throughput_definition": "frames / wall clock of the event-free pass, median over reps (latency comes from a second, instrumented pass; samples pooled over reps)",
+  "scheduling": "interleaved: each rep runs every configuration once, in a shuffled (seeded) order",
+  "percentile_method": "nearest-rank",
+  "gpu_clocks_note": "NVML samples every 50 ms during each config; clocks are driver-managed (not locked)",
+  "verify": {
+    "frames": 20903,
+    "max_abs_diff": 0.00390625,
+    "max_rel_diff": 3.99951e-06,
+    "out_of_tolerance": 0,
+    "decision_flips": 0,
+    "pass": true
+  },
+  "sweep": [
+  ],
+  "kernel_only": {
+    "mode": "sync",
+    "frames_per_launch": 1048576,
+    "launches": 200,
+    "launch_us": {
+      "n": 200,
+      "mean": 456.525,
+      "min": 439.296,
+      "p50": 449.536,
+      "p90": 461.6,
+      "p99": 661.504,
+      "p99_9": 669.696,
+      "max": 669.696
+    },
+    "frames_per_s_at_p50": 2.33257e+09,
+    "dram_gb_per_s_at_p50": 214.597,
+    "gpu_clocks": {
+      "samples": 3,
+      "sm_clock_mhz_median": 2250,
+      "mem_clock_mhz_median": 8000,
+      "pstate_mode": "P0",
+      "pstate_mode_fraction": 1,
+      "gpu_util_pct_median": 24
+    }
+  },
+  "kernel_only_sustained": {
+    "mode": "sustained",
+    "frames_per_launch": 1048576,
+    "launches": 200,
+    "launch_us": {
+      "n": 200,
+      "mean": 427.331,
+      "min": 415.744,
+      "p50": 419.84,
+      "p90": 422.912,
+      "p99": 692.128,
+      "p99_9": 720.896,
+      "max": 720.896
+    },
+    "frames_per_s_at_p50": 2.49756e+09,
+    "dram_gb_per_s_at_p50": 229.776,
+    "gpu_clocks": {
+      "samples": 3,
+      "sm_clock_mhz_median": 2580,
+      "mem_clock_mhz_median": 8000,
+      "pstate_mode": "P0",
+      "pstate_mode_fraction": 1,
+      "gpu_util_pct_median": 99
+    }
+  }
+}

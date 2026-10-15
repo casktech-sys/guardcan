@@ -1,0 +1,116 @@
+{
+  "benchmark": "cpu_baseline",
+  "host_cpu": "Intel(R) Core(TM) i7-14650HX",
+  "threads": 1,
+  "platform": "WSL2",
+  "compiler_flags": "g++ -O3 -march=native -ffp-contract=fast -std=c++17 -Wall",
+  "weights": "../models/ae_weights.npz",
+  "simd_tile_frames": 8,
+  "throughput": [
+    {
+      "impl": "scalar",
+      "frames_per_rep": 33554432,
+      "reps": 3,
+      "frames_per_s_median": 3.72491e+06,
+      "frames_per_s_min": 3.69221e+06,
+      "frames_per_s_max": 3.73394e+06,
+      "frames_per_s_reps": [
+        3.72491e+06,
+        3.73394e+06,
+        3.69221e+06
+      ],
+      "ns_per_frame_median": 268.463,
+      "verify": {
+        "frames": 20903,
+        "max_abs_diff": 0.00390625,
+        "max_rel_diff": 3.99951e-06,
+        "out_of_tolerance": 0,
+        "decision_flips": 0,
+        "pass": true
+      }
+    },
+    {
+      "impl": "simd",
+      "frames_per_rep": 33554432,
+      "reps": 3,
+      "frames_per_s_median": 3.08577e+07,
+      "frames_per_s_min": 3.04639e+07,
+      "frames_per_s_max": 3.08665e+07,
+      "frames_per_s_reps": [
+        3.04639e+07,
+        3.08665e+07,
+        3.08577e+07
+      ],
+      "ns_per_frame_median": 32.4068,
+      "verify": {
+        "frames": 20903,
+        "max_abs_diff": 0.00390625,
+        "max_rel_diff": 3.99951e-06,
+        "out_of_tolerance": 0,
+        "decision_flips": 0,
+        "pass": true
+      }
+    }
+  ],
+  "latency_impl": "simd",
+  "latency_definition": "wall time to score one batch of B frames (steady_clock), one thread",
+  "percentile_method": "nearest-rank",
+  "latency": [
+    {
+      "batch": 1,
+      "iters": 20000,
+      "e2e_us": {
+        "n": 20000,
+        "mean": 0.326994,
+        "min": 0.294,
+        "p50": 0.309999,
+        "p90": 0.322,
+        "p99": 0.405001,
+        "p99_9": 0.573,
+        "max": 178.298
+      }
+    },
+    {
+      "batch": 64,
+      "iters": 20000,
+      "e2e_us": {
+        "n": 20000,
+        "mean": 2.18577,
+        "min": 1.865,
+        "p50": 2.05,
+        "p90": 2.181,
+        "p99": 2.444,
+        "p99_9": 17.837,
+        "max": 409.456
+      }
+    },
+    {
+      "batch": 1024,
+      "iters": 20000,
+      "e2e_us": {
+        "n": 20000,
+        "mean": 32.9183,
+        "min": 29.46,
+        "p50": 31.775,
+        "p90": 33.328,
+        "p99": 52.807,
+        "p99_9": 374.089,
+        "max": 1392.43
+      }
+    },
+    {
+      "batch": 16384,
+      "iters": 20000,
+      "e2e_us": {
+        "n": 20000,
+        "mean": 540.325,
+        "min": 472.262,
+        "p50": 515.575,
+        "p90": 581.546,
+        "p99": 1115.49,
+        "p99_9": 1960.35,
+        "max": 3905
+      }
+    }
+  ]
+}

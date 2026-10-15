@@ -1,0 +1,121 @@
+{
+  "note": "Derived only from the measured JSON / nsys trace in this directory. POC measurements on one machine.",
+  "best_end_to_end": {
+    "strategy": "pinned",
+    "batch": 65536,
+    "frames_per_s_median": 104026000.0,
+    "frames_per_s_min": 103434000.0,
+    "frames_per_s_max": 104751000.0
+  },
+  "lowest_latency_by_batch": {
+    "1": {
+      "strategy": "zero-copy",
+      "p50": 44.207,
+      "p99": 129.239,
+      "p99_9": 292.348,
+      "cpu_simd": {
+        "p50": 0.309999,
+        "p99": 0.405001,
+        "p99_9": 0.573
+      }
+    },
+    "64": {
+      "strategy": "zero-copy+wc",
+      "p50": 46.144,
+      "p99": 138.433,
+      "p99_9": 319.8,
+      "cpu_simd": {
+        "p50": 2.05,
+        "p99": 2.444,
+        "p99_9": 17.837
+      }
+    },
+    "1024": {
+      "strategy": "zero-copy",
+      "p50": 61.323,
+      "p99": 191.389,
+      "p99_9": 342.928,
+      "cpu_simd": {
+        "p50": 31.775,
+        "p99": 52.807,
+        "p99_9": 374.089
+      }
+    },
+    "16384": {
+      "strategy": "zero-copy",
+      "p50": 333.419,
+      "p99": 572.172,
+      "p99_9": 912.437,
+      "cpu_simd": {
+        "p50": 515.575,
+        "p99": 1115.49,
+        "p99_9": 1960.35
+      }
+    }
+  },
+  "best_engine_pinned": {
+    "order": "breadth-first",
+    "streams": 4,
+    "batch": 65536,
+    "frames_per_s_median": 125631000.0
+  },
+  "breadth_over_depth_S4": {
+    "256": 9.530395531862062,
+    "1024": 8.558819320110171,
+    "4096": 6.311346995908406,
+    "16384": 2.0365872212055485,
+    "65536": 1.3093259156506087
+  },
+  "kernel_only_frames_per_s": 2497560000.0,
+  "kernel_only_mode": "sustained (kernel_only.json)",
+  "kernel_only_gpu_clocks": {
+    "samples": 3,
+    "sm_clock_mhz_median": 2580,
+    "mem_clock_mhz_median": 8000,
+    "pstate_mode": "P0",
+    "pstate_mode_fraction": 1,
+    "gpu_util_pct_median": 99
+  },
+  "verify": {
+    "frames": 20903,
+    "max_abs_diff": 1.96695e-06,
+    "max_rel_diff": 7.94149e-06,
+    "out_of_tolerance": 0,
+    "decision_flips": 0,
+    "pass": true
+  },
+  "verify_model": "current model (verify.json, threshold 0.081815)",
+  "cpu_simd_frames_per_s": 30857700.0,
+  "cpu_scalar_frames_per_s": 3724910.0,
+  "speedup": {
+    "end_to_end_best_vs_cpu_simd": 3.3711520949390263,
+    "engine_pinned_best_vs_cpu_simd": 4.071301490389756,
+    "kernel_only_vs_cpu_simd": 80.93798306419467
+  },
+  "nsys": [
+    {
+      "range": "depth-first S=4 B=4096",
+      "batches": 400,
+      "gpu_span_us": 55396.37,
+      "us_per_batch": 138.490925,
+      "gpu_busy_fraction": 0.2770626125863482,
+      "copy_busy_fraction": 0.23431282591260041,
+      "kernel_busy_fraction": 0.04274978667374776,
+      "kernel_time_overlapping_copy_fraction": 0.0,
+      "median_gap_h2d_to_kernel_us": 36.83,
+      "median_gap_kernel_to_d2h_us": 32.702
+    },
+    {
+      "range": "breadth-first S=4 B=4096",
+      "batches": 400,
+      "gpu_span_us": 36081.448,
+      "us_per_batch": 90.20361999999999,
+      "gpu_busy_fraction": 0.4193388247611349,
+      "copy_busy_fraction": 0.36140140495470136,
+      "kernel_busy_fraction": 0.0765465953583681,
+      "kernel_time_overlapping_copy_fraction": 0.14922378367943448,
+      "median_gap_h2d_to_kernel_us": 98.458,
+      "median_gap_kernel_to_d2h_us": 85.851
+    }
+  ]
+}

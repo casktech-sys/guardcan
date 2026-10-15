@@ -9,3 +9,6 @@ data/synthetic/
 *.pt
 .ipynb_checkpoints/
 .venv/
+engine/build/
+*.sqlite
+*.qdstrm

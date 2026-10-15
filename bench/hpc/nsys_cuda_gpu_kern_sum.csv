@@ -1,0 +1,2 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,8171933,856,9546.7,5920.0,5631,37758,8323.7,"gpu::score_kernel(const float *, float *, int)"

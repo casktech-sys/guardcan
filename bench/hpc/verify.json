@@ -1,0 +1,30 @@
+{
+  "benchmark": "verify",
+  "device": {
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "compute_capability": "8.9",
+    "sm_count": 24,
+    "global_mem_gb": 8.58522,
+    "cuda_driver_version": 13010,
+    "cuda_runtime_version": 13010,
+    "async_engine_count": 1,
+    "concurrent_managed_access": 0,
+    "pageable_memory_access": 0,
+    "can_map_host_memory": 1,
+    "host_cpu": "Intel(R) Core(TM) i7-14650HX",
+    "platform": "WSL2 (Linux on Windows, GPU via WDDM paravirtualization)"
+  },
+  "weights": "../models/ae_weights.npz",
+  "reference": "../models/ae_reference.npz",
+  "model_params": 1022,
+  "threshold": 0.0818148,
+  "tolerance": "|gpu - python| <= 1e-6 + 1e-4 * |python|",
+  "verify": {
+    "frames": 20903,
+    "max_abs_diff": 1.96695e-06,
+    "max_rel_diff": 7.94149e-06,
+    "out_of_tolerance": 0,
+    "decision_flips": 0,
+    "pass": true
+  }
+}
