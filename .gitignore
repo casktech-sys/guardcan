@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+models/
+bench/*.json
+bench/*.png
+data/car-hacking/
+data/synthetic/
+*.joblib
+*.pt
+.ipynb_checkpoints/
+.venv/
