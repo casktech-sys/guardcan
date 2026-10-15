@@ -216,7 +216,7 @@ What the measurements show:
 6. **The latency floor is the driver, not the GPU.** At B = 1 zero-copy's end-to-end p50 is 44 µs, but the GPU is
    busy for 11 µs of it. The rest is kernel launch and synchronisation through the WSL2 driver stack.
 
-### 5.4 Stream pipeline: issue order, not stream count
+### 5.4 Stream pipeline: issue order, not stream count (a WSL2 effect)
 
 ![Stream pipeline: depth-first vs breadth-first](../bench/hpc/streams_sweep.png)
 
@@ -238,6 +238,12 @@ Pinned engine throughput at 4 streams (median of 3 interleaved reps):
   kernel time overlaps a copy, the GPU is busy only **28 %** of the time, and on the same stream the median idle gap
   is **36.8 µs** from H2D-end to kernel-start and **32.7 µs** from kernel-end to D2H-start, for 138.5 µs per batch.
   Breadth-first: GPU busy 42 %, 15 % of kernel time overlapping copies, 90.2 µs per batch.
+- **This is a WSL2 single-copy-queue effect, not a general CUDA rule.** The GPU exposes one copy engine here
+  (`asyncEngineCount = 1`). Under WDDM paravirtualisation the trace shows every stream's work running as one in-order
+  sequence, so another stream's H2D does not start while a stream waits on its copy↔kernel hand-off. On native Linux
+  (Hyper-Q, independent hardware queues), depth-first multi-stream pipelines normally overlap copies and kernels, and
+  the gap between the two orders would be expected to shrink. That was **not measured here**; the Colab T4 notebook
+  (native Linux) is the comparison point.
 - **Power state amplifies it, and the two effects are separated here.** In the sweep, depth-first at B ≤ 4,096 ran
   mostly at **P8/P5 (210–1,080 MHz)**: its low GPU utilisation let the driver downclock, which slows it further.
   Breadth-first mostly ran at P0. In the Nsight profiling run both orders ran at **2,250 MHz P0**, and breadth-first
@@ -257,9 +263,11 @@ Best GPU strategy (zero-copy, or zero-copy + WC at B = 64) against the SIMD CPU 
 | 1,024 | 61.3 | 191 | **343** | **31.8** | **52.8** | 374 |
 | 16,384 | **333** | **572** | **912** | 516 | 1,115 | 1,960 |
 
-**For B ≤ 1,024 one CPU core has the lower latency**, by two orders of magnitude for single frames. **At
-B = 16,384 the GPU wins** at every percentile, with 2.1× lower p99.9. The CPU's own tail is heavy too (p99.9 is
-12× its p50 at B = 1,024): it reflects OS scheduling on a general-purpose OS under WSL2, not the algorithm.
+**For B ≤ 1,024 one CPU core has the lower typical latency (p50 and p99)**, by two orders of magnitude for single
+frames. At B = 1 and 64 it also has the lower p99.9. **At B = 1,024 the GPU already has the lower p99.9** (343 µs vs
+374 µs), and **at B = 16,384 the GPU wins** at every percentile, with 2.1× lower p99.9. The CPU's own tail is heavy
+too (p99.9 is 12× its p50 at B = 1,024): it reflects OS scheduling on a general-purpose OS under WSL2, not the
+algorithm.
 
 ## 6. What the numbers mean (and what they do not)
 
