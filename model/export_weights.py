@@ -89,14 +89,17 @@ def main(argv=None):
         arrays[f"W{i}"] = W
         arrays[f"b{i}"] = b
 
-    # Self-check: the exported arrays must reproduce the live model.
+    # Self-check: the exported arrays must reproduce the live model. Uniform probes put the timing columns
+    # hundreds of std devs out (errors ~1e3), so judge float32 rounding relatively, as the CUDA engine does.
     rng = np.random.default_rng(42)
     probe = rng.random((256, N_FEATURES), dtype=np.float32)
     want = ae.reconstruction_error(scaler.transform(probe))
     got = numpy_forward(layers, idx, mean, std, probe)
-    diff = float(np.max(np.abs(want - got)))
-    print(f"[export] backend={ae.backend}  dims={dims}  numpy-vs-model max|diff|={diff:.3e}")
-    if diff > 1e-4 * max(1.0, float(np.max(np.abs(want)))):
+    absd = np.abs(want - got)
+    rel = float(np.max(absd / np.maximum(np.abs(want), 1e-12)))
+    print(f"[export] backend={ae.backend}  dims={dims}  numpy-vs-model max|diff|={absd.max():.3e}  "
+          f"max rel={rel:.3e}  (probe errors up to {np.abs(want).max():.3g})")
+    if np.any(absd > 1e-6 + 1e-4 * np.abs(want)):
         raise RuntimeError("exported weights do not reproduce the model")
 
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)

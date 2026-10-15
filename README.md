@@ -4,13 +4,13 @@
 
 A portfolio proof-of-concept that demonstrates both **applied AI** (anomaly detection on automotive network traffic) and **HPC/systems** (a line-rate GPU inference engine), built on NVIDIA developer tools and mapped to the regulations that make in-vehicle intrusion detection a near-future requirement (UN R155/R156, ISO/SAE 21434, ISO 26262, ISO 42001).
 
-> **Status: proof-of-concept.** Not deployed in real vehicles. The CAN-layer detector is trained and evaluated on the public HCRL Car-Hacking dataset; the service-oriented (SOME/IP) layer and the fleet scale are represented with synthetic data and clearly labelled as such. All reported numbers are POC measurements.
+> **Status: proof-of-concept.** Not deployed in real vehicles. **All results so far are on synthetic data.** The CAN-layer detector is built for the public HCRL Car-Hacking dataset (the loader reads its format) but has **not yet been evaluated on it**. Every number below comes from a synthetic Car-Hacking-format set (`data/make_synthetic.py`). The service-oriented (SOME/IP) layer and the fleet scale will also be represented with synthetic data, labelled as such. All reported numbers are POC measurements on one machine.
 
 ---
 
-## What's in Week 1 (this drop)
+## Repository layout
 
-The CAN detection core — everything you need to train and evaluate a detector today:
+The CAN detection core (Week 1), the HPC engine (Week 2), and their docs:
 
 ```
 guardcan/
@@ -44,7 +44,7 @@ scikit-learn fallback runs on the CPU. Either way the autoencoder trains for 200
 once its loss converges. Measured end to end: 28 s on an RTX 4060 laptop with PyTorch. The point is to confirm the
 pipeline before you download anything or open Colab.
 
-## Run it on the real dataset (Colab GPU)
+## Run it on the real dataset (local GPU or Colab)
 
 1. Get the HCRL Car-Hacking dataset — see `data/README.md`.
 2. Put the CSVs in `data/car-hacking/`.
@@ -61,7 +61,8 @@ python -m model.train_classifier  --data data/car-hacking --out models/
 python -m model.eval --data data/car-hacking --models models/
 ```
 
-On Colab, `--backend torch` uses the GPU automatically (`torch.cuda.is_available()`).
+Locally or on Colab, `--backend torch` uses the GPU automatically when one is available
+(`torch.cuda.is_available()`).
 
 The autoencoder trains for 200 epochs by default; at 30 the PyTorch model was undertrained (detection F1 0.36 on
 the synthetic set). Each epoch on the full HCRL set has far more batches, so fewer epochs may be enough there.
@@ -114,7 +115,7 @@ replayed. POC numbers from one machine, all in [`bench/hpc/`](bench/hpc/results.
 
 | | result |
 |---|---|
-| Correctness vs the PyTorch model (200 epochs; 20,903 test frames) | **0** scores out of tolerance, **0** decision flips (max rel. diff 8 × 10⁻⁶) |
+| Correctness vs the PyTorch model (200 epochs; 20,903 test frames) | **0** scores out of tolerance, **0** decision flips (max rel. diff 7.9 × 10⁻⁶) |
 | CPU baseline, 1 thread, SIMD | 30.9 M frames/s |
 | GPU end-to-end, best memory strategy (pinned, B = 65,536) | 104.0 M frames/s (**3.4×**) |
 | GPU engine from a pinned ring (breadth-first, 4 streams) | 125.6 M frames/s (**4.1×**) |
@@ -132,13 +133,16 @@ What the measurements say:
   Pageable is worst throughout.
 - On this WSL2 setup, every copy↔kernel hand-off costs ~33–37 µs of idle GPU (measured in the Nsight trace).
   **Breadth-first issue** across streams beats depth-first by 1.3–9.5×; adding streams to a depth-first pipeline
-  does nothing.
+  does nothing. This is a **WSL2 single-copy-queue effect**, not a general CUDA rule: the GPU exposes one copy engine
+  here (`asyncEngineCount = 1`), and under WDDM the streams' work runs as one in-order sequence. On native Linux,
+  depth-first multi-stream pipelines normally overlap. That was not measured here; the Colab T4 notebook is the
+  comparison point.
 - The GPU's driver-managed power state matters. A mostly idle pipeline drops to P8/P5, so every result records
   the clock it ran at.
 - **Honest scope:** for this tiny model, one optimised CPU core already exceeds a vehicle's CAN load by orders of
-  magnitude, and it has lower latency for batches ≤ 1,024 frames. The GPU's measured advantages are aggregated
-  throughput, large-batch tail latency, and compute headroom (the kernel is ~24× faster than the end-to-end path,
-  which is PCIe/host-bound).
+  magnitude. It also has the lower typical latency (p50 and p99) for batches of up to 1,024 frames. At B = 1,024
+  the GPU already wins p99.9 (343 µs vs 374 µs). The GPU's measured advantages are aggregated throughput,
+  tail latency, and compute headroom (the kernel is ~24× faster than the end-to-end path, which is PCIe/host-bound).
 
 Run it (needs an NVIDIA GPU + CUDA toolkit; `nsys` optional):
 
@@ -156,4 +160,4 @@ No GPU? Use [`engine/colab_benchmark.ipynb`](engine/colab_benchmark.ipynb) on a 
 
 ## License
 
-MIT (template). Dataset is **not** redistributed here — download it from HCRL under its own terms.
+MIT — see [LICENSE](LICENSE). The dataset is **not** redistributed here; download it from HCRL under its own terms.
