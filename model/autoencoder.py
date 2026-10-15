@@ -24,7 +24,7 @@ def torch_available():
 class TorchAutoencoder:
     backend = "torch"
 
-    def __init__(self, input_dim, hidden=HIDDEN, epochs=30, batch=512, lr=1e-3, seed=42):
+    def __init__(self, input_dim, hidden=HIDDEN, epochs=200, batch=512, lr=1e-3, seed=42):
         self.input_dim = input_dim
         self.hidden = tuple(hidden)
         self.epochs, self.batch, self.lr, self.seed = epochs, batch, lr, seed

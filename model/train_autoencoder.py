@@ -20,7 +20,9 @@ def main(argv=None):
     ap.add_argument("--data", required=True, help="dataset dir (e.g. data/car-hacking or data/synthetic)")
     ap.add_argument("--out", default="models", help="output dir for model artifacts")
     ap.add_argument("--backend", default="auto", choices=["auto", "torch", "sklearn"])
-    ap.add_argument("--epochs", type=int, default=30)
+    # 200: at 30 epochs the torch AE is undertrained (synthetic set: detection F1 0.36 vs 0.90 at 200).
+    # sklearn's MLPRegressor treats this as max_iter and stops earlier once its loss converges.
+    ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--percentile", type=float, default=99.5,
                     help="normal-error percentile used as the anomaly threshold")
     args = ap.parse_args(argv)
