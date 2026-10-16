@@ -20,18 +20,20 @@ Full plan: see the build spec (`GuardCAN_Build_Spec.md`, kept in the PerfStack p
 
 ```
 ingest/   can_loader.py (HCRL Car-Hacking parser), features.py (22-feature per-message vectors)
-model/    autoencoder.py (torch + sklearn), train_autoencoder.py, train_classifier.py, eval.py, common.py
+model/    autoencoder.py (torch + sklearn), train_autoencoder.py, train_classifier.py, eval.py, common.py,
+          epoch_study.py, export_weights.py
 engine/   (Week 2) CUDA inference engine + memory-strategy benchmark
 soa/      (Week 3) synthetic SOME/IP + zero-copy tap
 serve/    (Week 4) TensorRT + Triton
 dashboard/(Week 3) V-SOC console
 docs/     architecture, compliance-mapping, threat-model, (Week 2) hpc-engine
 data/     README (dataset download) + make_synthetic.py
-bench/    committed results: metrics.json, Nsight profiles, charts
+bench/    committed results: hcrl/ (HCRL metrics + charts, time_split/, epoch study), hpc/ (engine, Nsight).
+          bench/metrics.json + roc/confusion.png = synthetic smoke test from run_week1.py (gitignored)
 ```
 
 Features are 22 per message: 11 CAN-ID bits + DLC/8 + 8 payload bytes/255 + 2 timing features
-(global and same-ID inter-arrival, log1p + standardized). Autoencoder: 22→16→8→16→22.
+(global and same-ID inter-arrival, log1p + standardized, computed per recording). Autoencoder: 22→16→8→16→22.
 
 ## Run (Week 1)
 
@@ -41,17 +43,24 @@ python run_week1.py                              # synthetic data -> train -> ev
 # real dataset (Colab GPU):
 python -m model.train_autoencoder --data data/car-hacking --backend torch --out models/
 python -m model.train_classifier  --data data/car-hacking --out models/
-python -m model.eval              --data data/car-hacking --models models/
+python -m model.eval              --data data/car-hacking --models models/ --out bench/hcrl
+# harder holdout (last 30 % of each recording): add --split time, --out models/hcrl-time,
+# and eval with --models models/hcrl-time --out bench/hcrl/time_split
 ```
 
-## Current focus — Week 2: the HPC engine (the differentiator)
+## Status
 
-Build `engine/`: a CUDA stream-concurrent batched inference engine running the autoencoder's forward
-pass on the GPU (hand-written CUDA MLP; overlap H2D/kernel/D2H across streams; micro-batches), a
-**memory-strategy benchmark** (pageable vs pinned vs zero-copy vs unified — throughput + latency),
-a single-thread CPU baseline, and **p50/p99/p99.9 latency** via Nsight. Export the Week 1
-autoencoder weights (ONNX or a NumPy dump) so the CUDA engine can load them. Commit profiles +
-a results table + chart to `bench/`, add `docs/hpc-engine.md`, and update the README results.
+- **Phase 1 (CAN detection core): done.** Loader, features, autoencoder + classifier, eval.
+- **Phase 2 (HPC engine): done.** `engine/`, results in `bench/hpc/`, `docs/hpc-engine.md`.
+- **HCRL evaluation: done.** Results in `bench/hcrl/` and the README's HCRL section (random + time split, epoch
+  study). The per-frame detector misses gear spoofing, its per-attack recall is unstable across training runs,
+  and on the attack-free capture it raises 28–61 false alarms per second (time / random split).
+
+## Current focus — windowed / event-level detection
+
+Move from per-frame alarms to detection over time windows / events, so that the score reflects what a V-SOC
+would act on (an attack episode, not a single frame) and the false-alarm rate is reported per unit time.
+Measure it on HCRL with both the random and the time split, and keep the per-frame results as the baseline.
 
 ## Conventions
 

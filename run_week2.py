@@ -2,6 +2,7 @@
 
     python run_week2.py            # build + verify the CUDA engine against the Python model
     python run_week2.py --bench    # ... then the full measured suite, Nsight timeline (if nsys exists), charts
+    python run_week2.py --data data/car-hacking   # verify on held-out HCRL frames (model trained on HCRL)
 
 Needs an NVIDIA GPU and the CUDA toolkit (`nvcc` on PATH); `nsys` is optional. Results land in bench/hpc/
 (see docs/hpc-engine.md). On a machine without a GPU use engine/colab_benchmark.ipynb on a Colab T4.
@@ -26,12 +27,13 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="GuardCAN Week-2: build, verify and benchmark the CUDA engine.")
     ap.add_argument("--bench", action="store_true", help="run the full measured benchmark suite (~25 min)")
     ap.add_argument("--arch", default="native", help="nvcc -arch (native, sm_75 for T4, sm_89 for RTX 40xx)")
+    ap.add_argument("--data", default=os.path.join(ROOT, "data", "synthetic"),
+                    help="dataset whose held-out test split is the verification reference (default: synthetic)")
     args = ap.parse_args(argv)
 
     if shutil.which("nvcc") is None:
         sys.exit("nvcc not found on PATH — install the CUDA toolkit (see docs/hpc-engine.md) or use the Colab notebook")
 
-    synth = os.path.join(ROOT, "data", "synthetic")
     models = os.path.join(ROOT, "models")
     if not os.path.exists(os.path.join(models, "autoencoder.joblib")):
         print("== no trained model yet: running Week 1 ==")
@@ -40,7 +42,7 @@ def main(argv=None):
 
     print("\n== export weights for the engine ==")
     from model import export_weights
-    export_weights.main(["--models", models, "--data", synth])
+    export_weights.main(["--models", models, "--data", args.data])
 
     py = sys.executable
     print("\n== build + verify ==")

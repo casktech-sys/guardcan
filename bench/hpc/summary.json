@@ -77,14 +77,14 @@
     "gpu_util_pct_median": 99
   },
   "verify": {
-    "frames": 20903,
-    "max_abs_diff": 1.96695e-06,
-    "max_rel_diff": 7.94149e-06,
+    "frames": 4465543,
+    "max_abs_diff": 4.8399e-05,
+    "max_rel_diff": 3.16889e-05,
     "out_of_tolerance": 0,
-    "decision_flips": 0,
+    "decision_flips": 1,
     "pass": true
   },
-  "verify_model": "current model (verify.json, threshold 0.081815)",
+  "verify_model": "current model (verify.json, threshold 0.046250)",
   "cpu_simd_frames_per_s": 30857700.0,
   "cpu_scalar_frames_per_s": 3724910.0,
   "speedup": {

@@ -13,7 +13,7 @@ The engine (engine/*.cu) has no Python, joblib, or PyTorch dependency: it reads 
 
 With --data, it also writes a reference set (ae_reference.npz) so the engine can verify itself:
 
-  X             float32 [n, 22]     RAW features (unscaled) of the held-out test split
+  X             float32 [n, 22]     RAW features (unscaled) of the held-out test split (the model's split)
   err           float32 [n]         the Python model's reconstruction error for those rows
   is_attack     int8    [n]         ground truth (for reference only)
 
@@ -110,12 +110,12 @@ def main(argv=None):
     if args.data:
         from ingest.can_loader import load_dataset
         from ingest.features import build_feature_matrix
-        from model.common import split_indices
+        from model.common import make_split
 
         df = load_dataset(args.data)
         X, _ = build_feature_matrix(df)
         labels = df["label"].to_numpy()
-        _, test_idx = split_indices(labels)
+        _, test_idx = make_split(df, meta.get("split", "random"))       # the split the model was trained with
         Xte = np.ascontiguousarray(X[test_idx], dtype=np.float32)
         err = ae.reconstruction_error(scaler.transform(Xte)).astype(np.float32)
         is_attack = (labels[test_idx] != "normal").astype(np.int8)

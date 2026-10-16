@@ -17,14 +17,14 @@
   "weights": "../models/ae_weights.npz",
   "reference": "../models/ae_reference.npz",
   "model_params": 1022,
-  "threshold": 0.0818148,
+  "threshold": 0.0462505,
   "tolerance": "|gpu - python| <= 1e-6 + 1e-4 * |python|",
   "verify": {
-    "frames": 20903,
-    "max_abs_diff": 1.96695e-06,
-    "max_rel_diff": 7.94149e-06,
+    "frames": 4465543,
+    "max_abs_diff": 4.8399e-05,
+    "max_rel_diff": 3.16889e-05,
     "out_of_tolerance": 0,
-    "decision_flips": 0,
+    "decision_flips": 1,
     "pass": true
   }
 }

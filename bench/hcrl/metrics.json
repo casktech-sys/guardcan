@@ -1,0 +1,195 @@
+{
+  "data": {
+    "path": "data/car-hacking",
+    "split": "random",
+    "frames": 14885142,
+    "test_frames": 4465543,
+    "test_support": {
+      "dos": 176256,
+      "fuzzy": 147554,
+      "gear": 179176,
+      "normal": 3766088,
+      "rpm": 196469
+    }
+  },
+  "detection": {
+    "precision": 0.9652533014096532,
+    "recall": 0.7435274606658041,
+    "f1": 0.8400051686264375,
+    "roc_auc": 0.9797844942449442,
+    "threshold": 0.04625054448843002,
+    "tp": 520064,
+    "fp": 18721,
+    "fn": 179391,
+    "tn": 3747367,
+    "backend": "torch",
+    "fp_rate": 0.004970940668407111,
+    "per_attack_type": {
+      "dos": {
+        "frames": 176256,
+        "detected": 176256,
+        "recall": 1.0,
+        "roc_auc_vs_normal": 0.9998014098425726
+      },
+      "fuzzy": {
+        "frames": 147554,
+        "detected": 147339,
+        "recall": 0.9985429063258197,
+        "roc_auc_vs_normal": 0.9999475345101008
+      },
+      "gear": {
+        "frames": 179176,
+        "detected": 0,
+        "recall": 0.0,
+        "roc_auc_vs_normal": 0.921450748553696
+      },
+      "rpm": {
+        "frames": 196469,
+        "detected": 196469,
+        "recall": 1.0,
+        "roc_auc_vs_normal": 0.9998831790202246
+      }
+    },
+    "false_positives_by_recording": {
+      "DoS_dataset": {
+        "normal_frames": 655869,
+        "false_positives": 2240,
+        "fp_rate": 0.003415316168320198
+      },
+      "DoS_dataset#1": {
+        "normal_frames": 266605,
+        "false_positives": 145,
+        "fp_rate": 0.0005438757712721067
+      },
+      "Fuzzy_dataset": {
+        "normal_frames": 736536,
+        "false_positives": 3378,
+        "fp_rate": 0.004586333865554433
+      },
+      "RPM_dataset": {
+        "normal_frames": 922445,
+        "false_positives": 1536,
+        "fp_rate": 0.0016651399270417207
+      },
+      "gear_dataset": {
+        "normal_frames": 887424,
+        "false_positives": 2175,
+        "fp_rate": 0.0024509141064474253
+      },
+      "normal_run_data": {
+        "normal_frames": 297209,
+        "false_positives": 9247,
+        "fp_rate": 0.03111278595197319
+      }
+    },
+    "training": {
+      "epochs": 200,
+      "train_frames": 8787537,
+      "train_seconds": 5582.5,
+      "load_seconds": 93.2,
+      "peak_host_rss_mb": 3989.0,
+      "peak_gpu_allocated_mb": 1229.7
+    }
+  },
+  "classification": {
+    "report": {
+      "dos": {
+        "precision": 0.9999943264664666,
+        "recall": 1.0,
+        "f1-score": 0.9999971632251861,
+        "support": 176256.0
+      },
+      "fuzzy": {
+        "precision": 0.9998236917589459,
+        "recall": 0.9992477330333301,
+        "f1-score": 0.9995356294255024,
+        "support": 147554.0
+      },
+      "gear": {
+        "precision": 0.9991522351431997,
+        "recall": 0.9998158235477966,
+        "f1-score": 0.9994839192012743,
+        "support": 179176.0
+      },
+      "normal": {
+        "precision": 0.9999620291918511,
+        "recall": 0.9999522050467222,
+        "f1-score": 0.9999571170951571,
+        "support": 3766088.0
+      },
+      "rpm": {
+        "precision": 0.999989820380616,
+        "recall": 1.0,
+        "f1-score": 0.9999949101644017,
+        "support": 196469.0
+      },
+      "accuracy": 0.9999274444339692,
+      "macro avg": {
+        "precision": 0.9997844205882158,
+        "recall": 0.9998031523255697,
+        "f1-score": 0.9997937478223043,
+        "support": 4465543.0
+      },
+      "weighted avg": {
+        "precision": 0.9999274633608792,
+        "recall": 0.9999274444339692,
+        "f1-score": 0.9999274467145949,
+        "support": 4465543.0
+      }
+    },
+    "confusion": {
+      "labels": [
+        "dos",
+        "fuzzy",
+        "gear",
+        "normal",
+        "rpm"
+      ],
+      "matrix": [
+        [
+          176256,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          147443,
+          0,
+          110,
+          0
+        ],
+        [
+          0,
+          0,
+          179143,
+          33,
+          0
+        ],
+        [
+          0,
+          26,
+          152,
+          3765908,
+          2
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          196469
+        ]
+      ]
+    },
+    "training": {
+      "n_iter": 15,
+      "max_iter": 300,
+      "train_frames": 10419599,
+      "train_seconds": 560.9,
+      "load_seconds": 94.2,
+      "peak_host_rss_mb": 4406.5
+    }
+  }
+}

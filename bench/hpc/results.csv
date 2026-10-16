@@ -1,8 +1,8 @@
 section,config,metric,value
-verify,"current model (verify.json, threshold 0.081815)",max_abs_diff,1.96695e-06
-verify,"current model (verify.json, threshold 0.081815)",max_rel_diff,7.94149e-06
-verify,"current model (verify.json, threshold 0.081815)",out_of_tolerance,0
-verify,"current model (verify.json, threshold 0.081815)",decision_flips,0
+verify,"current model (verify.json, threshold 0.046250)",max_abs_diff,4.8399e-05
+verify,"current model (verify.json, threshold 0.046250)",max_rel_diff,3.16889e-05
+verify,"current model (verify.json, threshold 0.046250)",out_of_tolerance,0
+verify,"current model (verify.json, threshold 0.046250)",decision_flips,1
 verify,weights used by the timing runs (infer_streams.json),max_abs_diff,0.00390625
 verify,weights used by the timing runs (infer_streams.json),max_rel_diff,3.99951e-06
 verify,weights used by the timing runs (infer_streams.json),out_of_tolerance,0

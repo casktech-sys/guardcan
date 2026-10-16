@@ -134,10 +134,16 @@ Intel i7-14650HX. The GPU reports `asyncEngineCount = 1` and `concurrentManagedA
 
 ### 5.1 Correctness
 
-The GPU engine scored the 20,903-frame held-out test split with **0 scores out of tolerance and 0 threshold-decision
-flips** against the current PyTorch model (200 epochs, threshold 0.0818; max relative difference 7.9 × 10⁻⁶;
-`bench/hpc/verify.json`). The two CPU implementations match to the same tolerance. Every memory strategy's first
-batch matched the CPU forward pass.
+The current model is the PyTorch autoencoder trained on the **HCRL Car-Hacking dataset** (200 epochs, threshold
+0.04625; see the README). The GPU engine scored all 4,465,543 frames of its held-out test split with **0 scores out
+of tolerance** (max relative difference 3.2 × 10⁻⁵; `bench/hpc/verify.json`). One frame's threshold decision
+differs from Python. That frame scores within the comparison tolerance of the threshold: 27 test frames do, the
+closest 2.6 × 10⁻⁸ from it. So this is float32 rounding at the decision boundary, not a model mismatch. On the
+synthetic test split (20,903 frames) the same export gives 0 out of tolerance and 0 flips.
+
+Before that, the engine was verified against the synthetic-trained 200-epoch model with 0 scores out of tolerance
+and 0 flips (max relative difference 7.9 × 10⁻⁶). The two CPU implementations match to the same tolerance. Every
+memory strategy's first batch matched the CPU forward pass.
 
 **Which weights the timings used.** The timing runs in `bench/hpc/` used an earlier 30-epoch export of the same
 1,022-parameter architecture. That model was undertrained, and Phase 1 now trains for 200 epochs. The engine
@@ -316,6 +322,7 @@ also build with CUDA 12.x: checked with nvcc 12.5 for `sm_75`, the Colab T4 targ
 # needs an NVIDIA GPU + CUDA toolkit (nvcc on PATH); nsys optional
 python run_week1.py                 # train the Week-1 models (PyTorch on the GPU if available)
 python run_week2.py --bench         # export -> build -> verify -> benchmark -> nsys -> charts  (~20 min)
+python run_week2.py --data data/car-hacking   # verify a model trained on HCRL against its own test frames
 
 # or step by step
 python -m model.export_weights --models models --data data/synthetic

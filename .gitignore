@@ -12,3 +12,4 @@ data/synthetic/
 engine/build/
 *.sqlite
 *.qdstrm
+logs/

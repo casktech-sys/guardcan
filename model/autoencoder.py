@@ -45,7 +45,8 @@ class TorchAutoencoder:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.net.to(self.device)
 
-    def fit(self, X):
+    def fit(self, X, on_epoch=None):
+        """Train on X. on_epoch(epoch, mean_train_mse), if given, runs after every epoch (see epoch_study.py)."""
         import torch
         if self.net is None:
             self._build()
@@ -66,15 +67,21 @@ class TorchAutoencoder:
                 total += loss.item() * b.shape[0]
             if ep == 0 or (ep + 1) % 10 == 0:
                 print(f"    [torch] epoch {ep+1:>3}/{self.epochs}  mse={total/n:.5f}")
+            if on_epoch is not None:
+                on_epoch(ep + 1, total / n)
+                self.net.train()
         return self
 
-    def reconstruction_error(self, X):
+    def reconstruction_error(self, X, chunk=1 << 20):
         import torch
         self.net.eval()
-        X = torch.as_tensor(np.asarray(X, dtype=np.float32), device=self.device)
-        with torch.no_grad():
-            err = ((self.net(X) - X) ** 2).mean(dim=1)
-        return err.cpu().numpy().astype(np.float32)
+        X = np.asarray(X, dtype=np.float32)
+        err = np.empty(len(X), dtype=np.float32)
+        with torch.no_grad():                    # in chunks: the full HCRL test split is ~4.5M frames
+            for i in range(0, len(X), chunk):
+                x = torch.as_tensor(X[i:i + chunk], device=self.device)
+                err[i:i + chunk] = ((self.net(x) - x) ** 2).mean(dim=1).cpu().numpy()
+        return err
 
     def save(self, path):
         import torch

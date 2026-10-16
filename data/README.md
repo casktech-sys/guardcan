@@ -42,6 +42,27 @@ Each data byte is its own comma-separated field (not space-separated), so a full
 `ingest/can_loader.py` parses this robustly (handles the variable column count and files with no
 flag column, like `normal_run_data.txt`).
 
+## What the files actually contain (measured on our copy)
+
+These were checked before the first training run on the real data (17,558,346 rows in the five files).
+The loader parses every attack CSV with 0 failures, and the R/T counts per file are: DoS 3,078,250 /
+587,521, Fuzzy 3,347,013 / 491,847, gear 3,845,890 / 597,252, RPM 3,966,805 / 654,897.
+
+- **The four attack CSVs end with the same 891,068 rows.** Each file is its own capture (32–41 minutes,
+  300 injection bursts), followed by an identical 481.6-second attack-free block. The block starts 22 s
+  (DoS) to 7,745 s (RPM) after the capture ends. Merged naively, those frames appear four times, and
+  the copies straddle the train/test split. The loader keeps the first copy (as recording `DoS_dataset#1`) and
+  drops 2,673,204 duplicate rows. That leaves 14,885,142 frames.
+- **Every file is a separate recording**, so the timing features are computed per recording (the loader's
+  `recording` column). The four attack captures don't overlap in time, but the duplicated block did: in a
+  merged stream, its copies sat next to each other and 15.2 % of all rows got an inter-arrival time of exactly 0.
+- **Our `normal_run_data.txt` ends mid-line** at an exact 4 KiB boundary (87,371,776 bytes), so this copy looks
+  truncated. The loader drops the partial last line and keeps 988,871 frames (506 s, 1,953 frames/s).
+- **The DoS, gear and RPM attacks are each one fixed frame, repeated:** DoS `0x000 00 00 00 00 00 00 00 00`
+  (an ID never seen in normal traffic), gear `0x43f 01 45 60 ff 6b 00 00 00`, and RPM `0x316 45 29 24 ff 29 24 00 ff`.
+  Gear and RPM use legitimate IDs, but their payloads never appear in normal frames. Fuzzy injects 491,847 distinct
+  random frames; 1.9 % of them use an ID that also occurs in normal traffic.
+
 ## No download? Run on synthetic data
 
 `make_synthetic.py` writes a small dataset in the exact same format so you can exercise the whole
