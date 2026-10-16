@@ -3,6 +3,9 @@
 The reconstruction error on normal traffic sets the detection threshold (a high percentile).
 At eval time, messages whose error exceeds the threshold are flagged as anomalous — including
 attack types the model never saw.
+
+With PyTorch, the model and optimiser are checkpointed to <out>/ae_checkpoint.pt every 20 epochs, so a run that is
+killed (e.g. the machine shuts down) continues with --resume instead of starting over.
 """
 import os
 import json
@@ -29,6 +32,10 @@ def main(argv=None):
                     help="normal-error percentile used as the anomaly threshold")
     ap.add_argument("--split", default="random", choices=SPLITS,
                     help="random: stratified rows (default); time: last 30%% of every capture is test")
+    ap.add_argument("--checkpoint-every", type=int, default=20,
+                    help="torch: save model + optimiser to <out>/ae_checkpoint.pt every N epochs (0 = never)")
+    ap.add_argument("--resume", action="store_true",
+                    help="torch: continue from <out>/ae_checkpoint.pt if it exists (same data, split and settings)")
     args = ap.parse_args(argv)
 
     os.makedirs(args.out, exist_ok=True)
@@ -50,8 +57,18 @@ def main(argv=None):
     ae, backend = build_autoencoder(args.backend, N_FEATURES, epochs=args.epochs)
     print(f"[autoencoder] backend = {backend}")
     t0 = time.perf_counter()
-    ae.fit(Xtn)
-    train_s = time.perf_counter() - t0
+    resumed = {}
+    if backend == "torch":
+        ae.fit(Xtn, checkpoint=os.path.join(args.out, "ae_checkpoint.pt"), checkpoint_every=args.checkpoint_every,
+               resume=args.resume)
+        train_s = ae.prior_train_seconds + time.perf_counter() - t0       # all sessions of a resumed run
+        if ae.start_epoch:
+            resumed = {"resumed_from_epoch": ae.start_epoch}
+    else:
+        if args.resume:
+            print("[autoencoder] --resume applies to the torch backend only (scikit-learn trains in one call)")
+        ae.fit(Xtn)
+        train_s = time.perf_counter() - t0
     print(f"[autoencoder] trained in {train_s:.1f} s ({load_s:.1f} s to load + build features)")
 
     err = ae.reconstruction_error(Xtn)
@@ -65,7 +82,7 @@ def main(argv=None):
                    "backend": backend, "feature_names": names, "seed": 42, "split": args.split,
                    "epochs": args.epochs, "train_frames": int(len(train_normal)),
                    "train_seconds": round(train_s, 1), "load_seconds": round(load_s, 1),
-                   **peak_memory()}, f, indent=2)
+                   **resumed, **peak_memory()}, f, indent=2)
     print(f"[autoencoder] saved to {args.out}/")
 
 

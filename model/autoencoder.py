@@ -6,6 +6,8 @@
 Both expose: fit(X_normal), reconstruction_error(X) -> per-sample MSE, save(path).
 Use build_autoencoder(backend=...) to construct and load_autoencoder(path) to restore.
 """
+import os
+import time
 import numpy as np
 import joblib
 
@@ -45,17 +47,29 @@ class TorchAutoencoder:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.net.to(self.device)
 
-    def fit(self, X, on_epoch=None):
-        """Train on X. on_epoch(epoch, mean_train_mse), if given, runs after every epoch (see epoch_study.py)."""
+    def fit(self, X, on_epoch=None, checkpoint=None, checkpoint_every=20, resume=False):
+        """Train on X. on_epoch(epoch, mean_train_mse), if given, runs after every epoch (see epoch_study.py).
+
+        With checkpoint (a file path), the model, the optimiser and the RNG state are saved there every
+        checkpoint_every epochs (0 = never) and after the last one. With resume=True, training continues from that
+        file if it exists; on the same device the result is identical to an uninterrupted run (same shuffles, same
+        Adam state).
+        """
         import torch
         if self.net is None:
             self._build()
-        X = torch.as_tensor(np.asarray(X, dtype=np.float32), device=self.device)
+        Xnp = np.asarray(X, dtype=np.float32)
+        X = torch.as_tensor(Xnp, device=self.device)
         opt = torch.optim.Adam(self.net.parameters(), lr=self.lr)
         loss_fn = torch.nn.MSELoss()
         n = X.shape[0]
+        self.start_epoch, self.prior_train_seconds, self.train_mse = 0, 0.0, []
+        fingerprint = self._fingerprint(Xnp)
+        if checkpoint and resume:
+            self._load_checkpoint(checkpoint, opt, fingerprint)
+        t0 = time.perf_counter()
         self.net.train()
-        for ep in range(self.epochs):
+        for ep in range(self.start_epoch, self.epochs):
             perm = torch.randperm(n, device=self.device)
             total = 0.0
             for i in range(0, n, self.batch):
@@ -65,12 +79,59 @@ class TorchAutoencoder:
                 loss.backward()
                 opt.step()
                 total += loss.item() * b.shape[0]
+            self.train_mse.append(total / n)
             if ep == 0 or (ep + 1) % 10 == 0:
                 print(f"    [torch] epoch {ep+1:>3}/{self.epochs}  mse={total/n:.5f}")
+            if checkpoint and checkpoint_every > 0 and ((ep + 1) % checkpoint_every == 0 or ep + 1 == self.epochs):
+                self._save_checkpoint(checkpoint, opt, ep + 1, fingerprint,
+                                      self.prior_train_seconds + time.perf_counter() - t0)
             if on_epoch is not None:
                 on_epoch(ep + 1, total / n)
                 self.net.train()
         return self
+
+    # A checkpoint only resumes the run that wrote it: same architecture, hyper-parameters, seed and training data.
+    def _fingerprint(self, Xnp):
+        import hashlib
+        sample = np.ascontiguousarray(Xnp[:: max(1, len(Xnp) // 100_000)])
+        return {"input_dim": self.input_dim, "hidden": list(self.hidden), "batch": self.batch, "lr": self.lr,
+                "seed": self.seed, "frames": int(len(Xnp)), "data_sha1": hashlib.sha1(sample.tobytes()).hexdigest()}
+
+    def _save_checkpoint(self, path, opt, epoch, fingerprint, train_seconds):
+        import torch
+        state = {"epoch": epoch, "target_epochs": self.epochs, "fingerprint": fingerprint, "device": self.device,
+                 "train_seconds": train_seconds, "train_mse": list(self.train_mse),
+                 "net": self.net.state_dict(), "opt": opt.state_dict(), "cpu_rng": torch.get_rng_state(),
+                 "cuda_rng": torch.cuda.get_rng_state() if self.device == "cuda" else None}
+        tmp = path + ".tmp"
+        torch.save(state, tmp)
+        os.replace(tmp, path)                   # a kill mid-write leaves the previous checkpoint intact
+        print(f"    [torch] checkpoint: epoch {epoch} -> {path}")
+
+    def _load_checkpoint(self, path, opt, fingerprint):
+        import torch
+        if not os.path.exists(path):
+            print(f"    [torch] --resume: no checkpoint at {path}, starting from epoch 0")
+            return
+        state = torch.load(path, map_location="cpu", weights_only=True)   # RNG states must stay CPU tensors
+        if state["fingerprint"] != fingerprint:
+            old = state["fingerprint"]
+            diff = {k: (old.get(k), v) for k, v in fingerprint.items() if old.get(k) != v}
+            raise SystemExit(f"[autoencoder] {path} was written by a different run (checkpoint vs now: {diff}); "
+                             "delete it or train without --resume")
+        if state["epoch"] > self.epochs:
+            raise SystemExit(f"[autoencoder] {path} is at epoch {state['epoch']}, past --epochs {self.epochs}")
+        self.net.load_state_dict(state["net"])
+        opt.load_state_dict(state["opt"])
+        torch.set_rng_state(state["cpu_rng"])
+        if self.device == "cuda" and state["device"] == "cuda":
+            torch.cuda.set_rng_state(state["cuda_rng"])
+        else:
+            print(f"    [torch] checkpoint was written on {state['device']}, resuming on {self.device}: "
+                  "the remaining epochs shuffle differently from an uninterrupted run")
+        self.start_epoch, self.prior_train_seconds = state["epoch"], state["train_seconds"]
+        self.train_mse = list(state["train_mse"])
+        print(f"    [torch] resumed from {path} at epoch {self.start_epoch}/{self.epochs}")
 
     def reconstruction_error(self, X, chunk=1 << 20):
         import torch

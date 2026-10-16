@@ -28,6 +28,9 @@ are trivial once a node is on the bus.
 - **Unsupervised autoencoder** on normal traffic → catches deviations, including novel attacks, via
   reconstruction error.
 - **Supervised classifier** → names the attack type for triage and reporting.
+- **Windowed per-ID frame counts** (100 ms windows, K-of-N alert rule) → injection at a higher-than-normal rate on
+  any ID, including spoofing with plausible payloads, raised as one event per attack episode
+  ([windowed-detection.md](windowed-detection.md)). Blind to a masquerade at the normal rate.
 
 ## Limitations (honest)
 

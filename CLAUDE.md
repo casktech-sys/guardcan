@@ -19,16 +19,17 @@ Full plan: see the build spec (`GuardCAN_Build_Spec.md`, kept in the PerfStack p
 ## Repo layout
 
 ```
-ingest/   can_loader.py (HCRL Car-Hacking parser), features.py (22-feature per-message vectors)
+ingest/   can_loader.py (HCRL Car-Hacking parser), features.py (22-feature per-message vectors),
+          windows.py (100 ms windows, frames per CAN ID)
 model/    autoencoder.py (torch + sklearn), train_autoencoder.py, train_classifier.py, eval.py, common.py,
-          epoch_study.py, export_weights.py
+          epoch_study.py, export_weights.py; windowed.py, train_windowed.py, eval_windowed.py, plot_windowed.py
 engine/   (Week 2) CUDA inference engine + memory-strategy benchmark
 soa/      (Week 3) synthetic SOME/IP + zero-copy tap
 serve/    (Week 4) TensorRT + Triton
 dashboard/(Week 3) V-SOC console
-docs/     architecture, compliance-mapping, threat-model, (Week 2) hpc-engine
+docs/     architecture, compliance-mapping, threat-model, (Week 2) hpc-engine, windowed-detection
 data/     README (dataset download) + make_synthetic.py
-bench/    committed results: hcrl/ (HCRL metrics + charts, time_split/, epoch study), hpc/ (engine, Nsight).
+bench/    committed results: hcrl/ (HCRL metrics + charts, time_split/, epoch study, windowed/), hpc/ (engine, Nsight).
           bench/metrics.json + roc/confusion.png = synthetic smoke test from run_week1.py (gitignored)
 ```
 
@@ -46,6 +47,10 @@ python -m model.train_classifier  --data data/car-hacking --out models/
 python -m model.eval              --data data/car-hacking --models models/ --out bench/hcrl
 # harder holdout (last 30 % of each recording): add --split time, --out models/hcrl-time,
 # and eval with --models models/hcrl-time --out bench/hcrl/time_split
+# windowed / event-level detection (time split only):
+python -m model.train_windowed --data data/car-hacking --out models/hcrl-time
+python -m model.eval_windowed  --data data/car-hacking --models models/hcrl-time --out bench/hcrl/windowed
+# a killed autoencoder run continues with --resume (checkpoint every 20 epochs in <out>/ae_checkpoint.pt)
 ```
 
 ## Status
@@ -55,6 +60,9 @@ python -m model.eval              --data data/car-hacking --models models/ --out
 - **HCRL evaluation: done.** Results in `bench/hcrl/` and the README's HCRL section (random + time split, epoch
   study). The per-frame detector misses gear spoofing, its per-attack recall is unstable across training runs,
   and on the attack-free capture it raises 28–61 false alarms per second (time / random split).
+- **Windowed / event-level detection: done (time split).** `docs/windowed-detection.md`, `bench/hcrl/windowed/`.
+  Per-ID 100 ms count envelope + 3-of-5 rule: all 358 test episodes (gear 89/89), latency p50 ~250 ms, 0 false
+  events in 1,425 s of attack-free test time (95 % bound < 7.6/h; HCRL is too short to show ≤ 1/h).
 
 ## Current focus — windowed / event-level detection
 
