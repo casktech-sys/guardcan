@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GuardCAN V-SOC replay</title>
+<meta name="description" content="GuardCAN V-SOC console: replays recorded HCRL Car-Hacking CAN traffic and the windowed detector's real events, next to the per-frame autoencoder baseline. Proof of concept, offline evaluation.">
+<style>
+  /* A dark security-operations console (design reference: mockup.html). Everything it shows comes from
+     replay_data.js, which dashboard/export_replay.py writes from recorded HCRL traffic and the saved detectors. */
+  :root{
+    --bg:#0a0f16; --panel:#111a24; --panel-2:#0e1620;
+    --line:#1e2b3a; --line-soft:#17222f;
+    --fg:#dbe6f1; --muted:#8c9db0; --faint:#6b7f95;
+    --accent:#2fd6c0;
+    --good:#45c26b; --warn:#e3b341; --crit:#f0585b; --crit-dim:#7a2730;
+    /* chart roles, validated as a set on the panel surface (dataviz validate_palette.js, dark, #111a24) */
+    --focus:#199e70; --inj:#9085e9; --pf-legit:#d95926; --pf-inj:#3987e5;
+    color-scheme: dark;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  .wrap{padding:0 16px 28px;max-width:1360px;margin:0 auto}
+  a{color:var(--accent)}
+  .tnum{font-variant-numeric:tabular-nums}
+  .mono{font-family:var(--mono)}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0b121b,#0b121bf2);border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+  .bar{display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap;padding:10px 16px;max-width:1360px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .logo{width:30px;height:30px;border-radius:7px;flex:none;background:radial-gradient(120% 120% at 30% 20%,#1b3a3a,#0d1a1a);border:1px solid #27534e;display:grid;place-items:center}
+  .logo svg{width:18px;height:18px}
+  .brand h1{font-size:15px;margin:0;letter-spacing:.3px;font-weight:600;white-space:nowrap}
+  .brand .sub{font-size:11px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+  .spacer{flex:1 1 20px}
+  .badge{font-family:var(--mono);font-size:10.5px;letter-spacing:1.1px;color:#0a0f16;background:var(--warn);border-radius:5px;padding:3px 8px;font-weight:600;white-space:nowrap}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .chip b{color:var(--fg);font-weight:600}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--good);flex:none}
+  .dot.crit{background:var(--crit)}
+
+  .intro{margin:14px 0 0;font-size:14px;line-height:1.5;color:#b9c7d6}
+  /* controls */
+  .controls{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:10px}
+  .ctl-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+  .ctl-label{font-size:11px;color:var(--faint);letter-spacing:.5px;text-transform:uppercase}
+  .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px;flex-wrap:wrap}
+  .seg button{background:transparent;border:0;border-radius:7px;padding:5px 11px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+  .seg button:hover{color:var(--fg);background:#16212d}
+  .seg button[aria-pressed="true"]{background:#16302c;color:#bff3ea;box-shadow:inset 0 0 0 1px #24564f}
+  .btn{display:inline-flex;align-items:center;gap:7px;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:5px 12px;font-size:12.5px;cursor:pointer;color:var(--fg)}
+  .btn:hover{border-color:#2c4054}
+  .btn svg{width:14px;height:14px}
+  .btn.primary{background:#16302c;border-color:#24564f;color:#bff3ea;min-width:92px;justify-content:center}
+  .toggle{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+  .toggle input{position:absolute;opacity:0;width:1px;height:1px}
+  .toggle .sw{width:34px;height:19px;border-radius:999px;background:#1a2734;border:1px solid var(--line);position:relative;flex:none;transition:background .15s}
+  .toggle .sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+  .toggle input:checked + .sw{background:#3a2015;border-color:#7a3b1f}
+  .toggle input:checked + .sw::after{transform:translateX(15px);background:var(--pf-legit)}
+  .toggle input:focus-visible + .sw{outline:2px solid var(--accent);outline-offset:2px}
+  .toggle b{color:var(--fg);font-weight:600}
+  .scrub-row{display:flex;align-items:center;gap:12px}
+  .scrub{flex:1;min-width:0;position:relative}
+  #cv-scrub{height:38px;cursor:pointer;border-radius:7px;touch-action:none}
+  .time{font-family:var(--mono);font-size:12.5px;color:var(--fg);white-space:nowrap}
+  .time small{color:var(--faint)}
+  .scen-desc{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .scen-desc b{color:var(--fg);font-weight:600}
+
+  .alert{display:flex;align-items:center;gap:12px;margin-top:12px;border-radius:11px;padding:10px 14px;border:1px solid var(--crit);background:linear-gradient(90deg,#1c0e13,#160c10);color:#ffd9da;font-size:13px;min-height:44px}
+  .alert.ok{border-color:#1e4a30;background:linear-gradient(90deg,#0d1a12,#0e1620);color:var(--muted)}
+  .alert.ok .pulse{background:var(--good);animation:none}
+  .alert.ok b{color:var(--fg)}
+  .alert.ok .tag{color:var(--muted);border-color:var(--line)}
+  .alert .pulse{width:11px;height:11px;border-radius:50%;background:var(--crit);flex:none;animation:pulse 1.1s infinite}
+  .alert b{color:#fff}
+  .alert .tag{margin-left:auto;font-family:var(--mono);font-size:11px;color:#d9d3ff;border:1px solid #4b4380;padding:3px 8px;border-radius:5px;white-space:nowrap}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 #f0585b88}70%{box-shadow:0 0 0 9px #f0585b00}100%{box-shadow:0 0 0 0 #f0585b00}}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0;position:relative;overflow:hidden}
+  .tile .k{font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+  .tile .v{font-size:26px;font-weight:600;margin-top:4px;letter-spacing:.2px}
+  .tile .u{font-size:12px;color:var(--faint);margin-left:4px;font-weight:400}
+  .tile .foot{font-size:11.5px;color:var(--faint);margin-top:2px;line-height:1.45}
+  .tile .foot b{color:var(--muted);font-weight:600}
+  .sevbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+  .tile.t-good .sevbar{background:var(--good)} .tile.t-base .sevbar{background:var(--pf-legit)}
+  .kpi-src{font-size:11px;color:var(--faint);margin-top:6px}
+
+  .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;margin-top:12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:0;display:flex;flex-direction:column}
+  .panel>.head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;padding:10px 14px 9px;border-bottom:1px solid var(--line-soft)}
+  .panel .head h2{font-size:12.5px;margin:0;font-weight:600;letter-spacing:.3px}
+  .panel .head .meta{margin-left:auto;font-size:11px;color:var(--faint);font-family:var(--mono)}
+  .panel .body{padding:12px 14px;min-width:0}
+  .c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+  canvas{display:block;width:100%}
+
+  .idchips{display:flex;flex-wrap:wrap;gap:5px;margin-left:auto}
+  .idchip{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer}
+  .idchip:hover{color:var(--fg)}
+  .idchip[aria-pressed="true"]{color:#c9f5e6;border-color:var(--focus);box-shadow:inset 0 -2px 0 var(--focus)}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{display:inline-block;flex:none}
+  .lg-line{width:18px;height:2px;border-radius:1px}
+  .lg-dash{width:18px;height:0;border-top:2px dashed var(--warn)}
+  .lg-box{width:14px;height:10px;border-radius:2px}
+  .lg-tick{width:2px;height:12px;background:var(--crit)}
+  .lane-title{font-size:11px;color:var(--faint);letter-spacing:.5px;text-transform:uppercase;margin:12px 0 4px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .lane-title b{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0}
+  details.tv{margin-top:10px;font-size:12px;color:var(--muted)}
+  details.tv summary{cursor:pointer;color:var(--faint)}
+  details.tv .tvwrap{max-height:220px;overflow:auto;margin-top:6px;border:1px solid var(--line-soft);border-radius:8px}
+
+  .threatlvl{display:flex;align-items:center;gap:10px}
+  .threatlvl svg{width:22px;height:22px;flex:none}
+  .lvl{font-family:var(--mono);font-weight:700;font-size:19px;letter-spacing:.8px}
+  .lvl.ok{color:var(--good)} .lvl.cr{color:var(--crit)}
+  .lvl-sub{font-size:12.5px;color:var(--muted);margin-top:4px;min-height:38px}
+  .lvl-sub b{color:var(--fg)}
+  .gt{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:10px;padding:8px 10px;border:1px dashed #3b3568;border-radius:8px;background:#141327}
+  .gt i{width:10px;height:10px;border-radius:2px;background:var(--inj);opacity:.25;flex:none}
+  .gt.on i{opacity:1}
+  .gt b{color:var(--fg);font-weight:600}
+  .gt small{color:var(--faint)}
+  table.kv{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:12px}
+  table.kv th{font-weight:400;color:var(--muted);text-align:left;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+  table.kv td{text-align:right;padding:6px 0;border-bottom:1px solid var(--line-soft);font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--fg);white-space:nowrap}
+  table.kv td small{color:var(--faint);font-family:var(--sans)}
+  .rule{font-size:11.5px;color:var(--faint);margin-top:10px;line-height:1.55}
+
+  .feeds{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+  .feeds>div{min-width:0}
+  .feeds.two{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}
+  .feedhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--faint);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px}
+  .feedhead b{color:var(--fg);font-size:12.5px;letter-spacing:0;text-transform:none}
+  .feedhead .cnt{margin-left:auto;font-family:var(--mono);text-transform:none;letter-spacing:0;color:var(--muted)}
+  .feedwrap{overflow:auto;max-height:300px;border:1px solid var(--line-soft);border-radius:8px}
+  table.feed{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  table.feed th{position:sticky;top:0;background:var(--panel-2);color:var(--faint);font-weight:500;text-align:left;padding:6px 9px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--line-soft);font-family:var(--sans)}
+  table.feed td{padding:5px 9px;border-bottom:1px solid var(--line-soft);color:var(--fg)}
+  table.feed td.r,table.feed th.r{text-align:right}
+  .feeds.two table.feed td,.feeds.two table.feed th{padding-left:6px;padding-right:6px}
+  .feeds.two .c-lasted{display:none}
+  table.feed tr.new td{animation:flash .7s ease}
+  table.feed td small{color:var(--faint)}
+  table.feed .empty td{color:var(--faint);font-family:var(--sans);white-space:normal;padding:12px 9px}
+  @keyframes flash{from{background:#2a1418}to{background:transparent}}
+  .m-ok{color:var(--good)} .m-bad{color:var(--crit)}
+  .vd{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+  .pfl{background:var(--pf-legit)} .pfi{background:var(--pf-inj)}
+
+  table.ov{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.ov th{font-weight:500;color:var(--faint);text-align:left;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;padding:0 8px 6px 0;border-bottom:1px solid var(--line-soft)}
+  table.ov th.r,table.ov td.r{text-align:right}
+  table.ov td{padding:7px 8px 7px 0;border-bottom:1px solid var(--line-soft);vertical-align:middle;font-variant-numeric:tabular-nums}
+  table.ov td.r{font-family:var(--mono)}
+  table.ov tr{cursor:pointer}
+  table.ov tr:hover td{background:#131f2b}
+  table.ov tr[aria-current="true"] td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+  table.ov td:first-child{padding-left:9px;white-space:nowrap}
+  table.ov canvas{height:22px;min-width:120px}
+  table.ov small{color:var(--faint)}
+  .ovwrap{overflow-x:auto}
+  .ovnote{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.5}
+
+  .comp{display:flex;flex-direction:column}
+  .crow{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line-soft)}
+  .crow:last-child{border-bottom:0}
+  .crow .reg{width:104px;flex:none;font-family:var(--mono);font-size:12px;color:var(--fg)}
+  .crow .reg small{display:block;color:var(--faint);font-size:10.5px;font-family:var(--sans);margin-top:1px;line-height:1.3}
+  .crow .what{flex:1;font-size:12px;color:var(--muted);min-width:0;line-height:1.5}
+  .crow .what code{font-family:var(--mono);font-size:11px;color:var(--fg)}
+  .st2{flex:none;font-size:10px;font-family:var(--mono);border-radius:5px;padding:3px 7px;align-self:center;white-space:nowrap}
+  .st2.on{color:var(--good);border:1px solid #1e4a30;background:#0d1a12}
+  .st2.part{color:var(--warn);border:1px solid #4a3d16;background:#191407}
+  .st2.no{color:var(--muted);border:1px solid var(--line);background:var(--panel-2)}
+
+  .cluster{background:#06090d;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;align-items:center;gap:16px;min-width:0}
+  .cluster .ring{width:62px;height:62px;border-radius:50%;flex:none;border:4px solid #16222e;border-top-color:#2a3b4d;display:grid;place-items:center}
+  .cluster .ring svg{width:26px;height:26px}
+  .cluster .lamp{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--warn);font-weight:600}
+  .cluster .lamp.off{color:var(--faint);font-weight:500}
+  .cluster .lamp svg{width:17px;height:17px}
+  .cluster p{margin:7px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+  .tip{position:fixed;z-index:50;pointer-events:none;background:#0b131c;border:1px solid #2a3b4d;border-radius:8px;padding:8px 10px;font-size:12px;color:var(--muted);box-shadow:0 6px 20px #0008;min-width:180px;max-width:300px}
+  .tip b{color:var(--fg)}
+  .tip .row{display:flex;align-items:center;gap:7px;margin-top:3px}
+  .tip .row i{width:12px;height:2px;flex:none}
+  .tip .row .val{margin-left:auto;font-family:var(--mono);color:var(--fg);font-variant-numeric:tabular-nums}
+  .tip .hd{font-family:var(--mono);color:var(--fg);margin-bottom:2px}
+
+  .note{font-size:12px;color:var(--faint);line-height:1.65;margin-top:16px;border-top:1px solid var(--line-soft);padding-top:12px}
+  .note b{color:var(--muted)}
+  .note p{margin:0 0 8px}
+  .note code{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  #fatal{margin:40px auto;max-width:640px;padding:16px;border:1px solid var(--crit);border-radius:12px;color:#ffd9da;background:#160c10}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  @media(max-width:1180px){ .c4{grid-column:span 5}.c8{grid-column:span 7} .c5,.c7{grid-column:span 6} }
+  @media(max-width:960px){ .c4,.c5,.c6,.c7,.c8{grid-column:1/-1} .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} .feeds.two{grid-template-columns:minmax(0,1fr)} }
+  @media(max-width:520px){ .kpis{grid-template-columns:1fr} .scrub-row{flex-wrap:wrap} .scrub{flex-basis:100%}
+    .alert{flex-wrap:wrap} .alert .tag{margin-left:0;white-space:normal} }
+  @media(prefers-reduced-motion:reduce){ .alert .pulse{animation:none} table.feed tr.new td{animation:none} }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#2fd6c0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z"/><path d="M9 12l2 2 4-4"/></svg>
+      </span>
+      <div style="min-width:0"><h1>GuardCAN</h1><div class="sub">Vehicle security operations · replay</div></div>
+    </div>
+    <span class="badge" title="Recorded HCRL Car-Hacking traffic (2016) replayed offline with the real detector output. Not a live vehicle.">REPLAY · RECORDED HCRL DATA</span>
+    <div class="spacer"></div>
+    <span class="chip">Threat <span class="dot" id="h-dot"></span><b id="h-threat">NORMAL</b></span>
+    <span class="chip">Windowed events <b id="h-events" class="tnum">0</b></span>
+    <span class="chip" id="h-pf-chip" hidden>Per-frame alarms <b id="h-pf" class="tnum" style="color:var(--pf-legit)">0</b></span>
+    <span class="chip mono" id="h-clock" title="Capture time of the replayed frames (HCRL log timestamps, UTC)">--</span>
+  </div>
+</header>
+
+<div id="fatal" hidden><b>replay_data.js did not load.</b> Generate it with
+  <code>python -m dashboard.export_replay --data data/car-hacking</code> and keep it next to index.html.</div>
+
+<div class="wrap" id="app">
+
+  <p class="intro">In a car, the electronic control units talk over an unauthenticated network called the CAN bus; this page replays traffic recorded from one car in a public research dataset, with fake messages injected by the researchers, and shows when GuardCAN's detector flagged each attack (an offline replay, not a live vehicle).</p>
+
+  <section class="controls" aria-label="Replay controls">
+    <div class="ctl-row">
+      <span class="ctl-label">Scenario</span>
+      <div class="seg" role="group" aria-label="Scenario" id="scen-tabs"></div>
+      <span class="spacer"></span>
+      <label class="toggle" title="Show the per-frame autoencoder's alarms on the same timeline (shortcut: C)">
+        <input type="checkbox" id="cmp"><span class="sw"></span><span>Compare with <b>per-frame autoencoder</b></span>
+      </label>
+    </div>
+    <div class="ctl-row">
+      <button class="btn primary" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor" id="play-ico"><path d="M7 4v16l13-8z"/></svg><span id="play-txt">Play</span></button>
+      <button class="btn" id="restart" aria-label="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Restart</button>
+      <div class="seg" role="group" aria-label="Replay speed" id="speeds"></div>
+      <div class="scrub-row" style="flex:1;min-width:260px">
+        <div class="scrub"><canvas id="cv-scrub" role="slider" tabindex="0" aria-label="Replay position" aria-valuemin="0"></canvas></div>
+        <span class="time tnum" id="time">0.0 <small>/ 0.0 s</small></span>
+      </div>
+    </div>
+    <div class="scen-desc" id="scen-desc"></div>
+  </section>
+
+  <div class="alert ok" id="alert" role="status" aria-live="polite">
+    <span class="pulse" aria-hidden="true"></span>
+    <span id="alert-txt"></span>
+    <span class="tag" id="alert-tag"></span>
+  </div>
+
+  <div class="grid">
+    <section class="panel c8" aria-labelledby="h-rate">
+      <div class="head">
+        <h2 id="h-rate">Frames per CAN ID per 100 ms (live)</h2>
+        <div class="idchips" id="idchips" role="group" aria-label="Highlighted CAN ID"></div>
+      </div>
+      <div class="body">
+        <canvas id="cv-main" aria-label="Frame count per 100 ms window for the busiest CAN IDs, with the learned ceiling, injection intervals and alerts"></canvas>
+        <div id="cmp-lanes" hidden>
+          <div class="lane-title">Same timeline: windowed detector vs per-frame autoencoder <b id="cmp-sum"></b></div>
+          <canvas id="cv-cmp" aria-label="Windowed events next to per-frame autoencoder alarms per 100 ms window"></canvas>
+        </div>
+        <div class="legend" id="legend">
+          <span><i class="lg-line" style="background:var(--focus)"></i><span id="lg-focus">highlighted ID</span></span>
+          <span><i class="lg-line" style="background:#4a5d72;height:1px"></i>other busy IDs</span>
+          <span><i class="lg-dash"></i>learned ceiling (highlighted ID)</span>
+          <span><i class="lg-line" style="background:var(--crit);height:3px"></i>window above ceiling</span>
+          <span><i class="lg-tick"></i>windowed event</span>
+          <span><i class="lg-box" style="background:rgba(144,133,233,.28);box-shadow:inset 0 2px 0 var(--inj)"></i>injection interval (ground truth)</span>
+          <span class="cmp-only" hidden><i class="lg-box" style="background:var(--pf-legit)"></i>per-frame alarm, legitimate frame</span>
+          <span class="cmp-only" hidden><i class="lg-box" style="background:var(--pf-inj)"></i>per-frame alarm, injected frame</span>
+        </div>
+        <details class="tv" id="tv">
+          <summary>Table view: windows above the ceiling so far</summary>
+          <div class="tvwrap"><table class="feed"><thead><tr><th>window end (s)</th><th>CAN ID</th><th class="r">frames</th><th class="r">ceiling</th><th class="r">injected</th></tr></thead><tbody id="tv-body"></tbody></table></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="panel c4" aria-labelledby="h-threat-p">
+      <div class="head"><h2 id="h-threat-p">Threat status</h2><span class="meta">windowed detector</span></div>
+      <div class="body">
+        <div class="threatlvl">
+          <svg id="lvl-ico" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+          <span class="lvl ok" id="lvl-txt">NORMAL</span>
+        </div>
+        <div class="lvl-sub" id="lvl-sub"></div>
+        <div class="gt" id="gt"><i></i><span id="gt-txt"></span></div>
+        <table class="kv" aria-label="This replay so far">
+          <tbody>
+            <tr><th>Attack episodes so far <small>(ground truth)</small></th><td id="c-ep">0</td></tr>
+            <tr><th>Detected by an event</th><td id="c-det">0</td></tr>
+            <tr><th>Windowed events</th><td id="c-ev">0</td></tr>
+            <tr><th>False events</th><td id="c-fe">0</td></tr>
+            <tr><th>Per-frame autoencoder alarms</th><td id="c-pf">0</td></tr>
+            <tr><th>… on legitimate frames</th><td id="c-pfl">0</td></tr>
+          </tbody>
+        </table>
+        <div class="rule" id="rule-txt"></div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <div class="kpi-src" id="kpi-src"></div>
+
+  <div class="grid">
+    <section class="panel c7" aria-labelledby="h-feed">
+      <div class="head"><h2 id="h-feed">Event feed</h2><span class="meta">newest first</span></div>
+      <div class="body">
+        <div class="feeds" id="feeds">
+          <div>
+            <div class="feedhead"><b>Windowed detector</b>events<span class="cnt" id="ev-cnt">0</span></div>
+            <div class="feedwrap"><table class="feed">
+              <thead><tr><th>t (s)</th><th>CAN ID</th><th class="r" title="Event raise time minus the episode's first injected frame">latency</th><th>ground truth</th><th class="r c-lasted">lasted</th><th class="r" title="Most frames of this ID in one 100 ms window during the event, vs its ceiling">peak / ceil.</th></tr></thead>
+              <tbody id="ev-body"></tbody>
+            </table></div>
+          </div>
+          <div id="pf-feed" hidden>
+            <div class="feedhead"><b>Per-frame autoencoder</b>alarms, per 100 ms window<span class="cnt" id="pf-cnt">0</span></div>
+            <div class="feedwrap"><table class="feed">
+              <thead><tr><th>t (s)</th><th>CAN ID</th><th class="r">alarms</th><th>frames</th></tr></thead>
+              <tbody id="pf-body"></tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel c5" aria-labelledby="h-ov">
+      <div class="head"><h2 id="h-ov">All replays at a glance</h2><span class="meta">one vehicle · not a fleet</span></div>
+      <div class="body">
+        <div class="ovwrap"><table class="ov">
+          <thead><tr><th>scenario</th><th>timeline (whole replay)</th><th class="r">episodes</th><th class="r">events<br>(false)</th><th class="r">per-frame alarms<br>(legit frames)</th></tr></thead>
+          <tbody id="ov-body"></tbody>
+        </table></div>
+        <div class="ovnote">All five replays come from <b>one vehicle</b> (the HCRL Car-Hacking captures, recorded in 2016); they are different stretches of its test data, not different cars. A fleet view would need data from more than one vehicle. Click a row to replay it.</div>
+      </div>
+    </section>
+
+    <section class="panel c7" aria-labelledby="h-reg">
+      <div class="head"><h2 id="h-reg">Regulation &amp; standard mapping</h2><span class="meta">why it exists · what this POC covers</span></div>
+      <div class="body">
+        <div class="comp">
+          <div class="crow"><div class="reg">UN R155<small>Cybersecurity management (CSMS)</small></div><div class="what">Detect and monitor attacks on vehicles in the field. This console shows that detection function on recorded data: an in-vehicle detector raising events for a V-SOC analyst.</div><div class="st2 part">POC, offline</div></div>
+          <div class="crow"><div class="reg">UN R156<small>Software updates (SUMS)</small></div><div class="what">Secure, recorded (OTA) updates: the response loop would push a re-learned ceiling or model after a confirmed campaign. Not built.</div><div class="st2 no">design only</div></div>
+          <div class="crow"><div class="reg">ISO/SAE 21434<small>Cybersecurity engineering</small></div><div class="what">Threat analysis and monitoring. A lightweight TARA is in <code>docs/threat-model.md</code>; this detector covers flood-style injection, not a rate-matched masquerade or suspension.</div><div class="st2 part">lightweight TARA</div></div>
+          <div class="crow"><div class="reg">ISO 26262<small>Functional safety</small></div><div class="what">Detection is advisory and never changes vehicle behaviour; the driver sees at most a generic telltale (right). No safety case exists for this POC.</div><div class="st2 part">by design</div></div>
+          <div class="crow"><div class="reg">ISO/IEC 42001<small>AI management</small></div><div class="what">Governed model: documented data and splits, an analyst in the loop (no auto-blocking), a cross-day drift check. Documented, not audited.</div><div class="st2 part">documented</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel c5" aria-labelledby="h-drv">
+      <div class="head"><h2 id="h-drv">What the driver sees</h2><span class="meta">concept</span></div>
+      <div class="body">
+        <div class="cluster">
+          <div class="ring" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#56687c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z"/></svg></div>
+          <div>
+            <span class="lamp off" id="lamp">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              <span id="lamp-txt">No telltale</span>
+            </span>
+            <p>Security detail is <b style="color:var(--muted)">not</b> shown to the driver: at most a generic service telltale while an event is open. CAN IDs, attack type and evidence go to the V-SOC (UN R155 / ISO 21434; no distraction, ISO 26262). A design concept; no vehicle runs this.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="note" id="about">
+    <p><b>What this is.</b> A replay of <b>recorded</b> CAN traffic from the public HCRL Car-Hacking dataset (one vehicle, recorded in 2016) with the <b>real output</b> of GuardCAN's detectors. A proof of concept evaluated offline; it is not connected to a vehicle and nothing here ran in one.</p>
+    <p><b>Where every number comes from.</b> <code>dashboard/export_replay.py</code> loads the saved time-split models, runs both detectors on the test part (the last 30 % of every recording, never used for fitting), checks that it reproduces the windowed events and per-frame false alarms in <code>bench/hcrl/windowed/metrics.json</code>, and exports per-ID frame counts per 100 ms window, the learned ceilings, the ground-truth injection intervals, the windowed events and the per-frame alarms for five ~60–90 s stretches. The headline tiles are the whole test part from that <code>metrics.json</code>. Nothing on this page is generated or random. Details: <a href="https://github.com/casktech-sys/guardcan/blob/HEAD/dashboard/README.md">dashboard/README.md</a>, <a href="https://github.com/casktech-sys/guardcan/blob/HEAD/docs/windowed-detection.md">docs/windowed-detection.md</a>, <a href="https://github.com/casktech-sys/guardcan">the repository</a>.</p>
+    <p id="about-detail"></p>
+    <p id="data-cite"><b>Data and citation.</b> Traffic: the <a href="https://ocslab.hksecurity.net/Datasets/car-hacking-dataset">HCRL Car-Hacking Dataset</a>, Hacking and Countermeasure Research Lab (HCRL), Korea University, recorded from a real vehicle through its OBD-II port. Source paper: H. M. Song, J. Woo and H. K. Kim, “In-vehicle network intrusion detection using deep convolutional neural network,” <i>Vehicular Communications</i>, vol. 21, 100198, 2020, <a href="https://doi.org/10.1016/j.vehcom.2019.100198">doi:10.1016/j.vehcom.2019.100198</a>. <b>Only aggregated counts derived from the dataset are published here</b> (frames per CAN ID per 100 ms window, and the times and counts of injection intervals, events and alarms, with the CAN IDs and log times they refer to); no CAN frames or payloads, and the dataset itself is not redistributed. Download it from HCRL under its own terms.</p>
+    <p><b>Limits.</b> One vehicle and one attack style (high-rate injection). The windowed detector cannot see an attacker who silences the real ECU and sends at the normal rate, does not check for IDs going silent, and stops detecting injection below about 10 extra frames/s on a 100 frames/s ID (derived test). Zero false events in HCRL's 0.4 h of attack-free test traffic bound the rate only to &lt; 7.6 per hour; the ≤ 1 per vehicle-hour bar needs ≥ 3 h of attack-free data to show.</p>
+  </div>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+
+<script src="replay_data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var D = window.GUARDCAN_REPLAY;
+  function $(id) { return document.getElementById(id); }
+  if (!D) { $("fatal").hidden = false; $("app").hidden = true; return; }
+
+  var W = D.window_ms / 1000, KEYS = D.keys, CEIL = D.ceiling, NK = KEYS.length, UNK = NK - 1;
+  var H = D.headline, RULE = D.rule;
+  var SPEEDS = [1, 5, 20], VIEW_S = 30, EPS = 1e-6;
+  var MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
+  var C = { focus: "#199e70", other: "#4a5d72", ceil: "#e3b341", crit: "#f0585b", inj: "#9085e9",
+            pfLegit: "#d95926", pfInj: "#3987e5", grid: "#18232f", axis: "#2a3a4c", tick: "#7f92a6",
+            fg: "#dbe6f1", panel: "#111a24", head: "#2fd6c0" };
+  var ATT = { dos: "DoS", fuzzy: "fuzzing", gear: "gear spoofing", rpm: "RPM spoofing" };
+  var SHORT = { dos: "DoS", fuzzy: "fuzzing", gear: "gear", rpm: "RPM" };
+  var TAB = { dos: "DoS flood", fuzzy: "Fuzzing", gear: "Gear spoofing", rpm: "RPM spoofing", normal: "Attack-free" };
+  var TICKS = [0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
+
+  function fmt(n) { return Number(n).toLocaleString("en-US"); }
+  function f1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function setText(id, v) { var e = $(id); v = String(v); if (e && e.textContent !== v) e.textContent = v; }
+  function setHTML(id, v) { var e = $(id); if (e && e.__h !== v) { e.innerHTML = v; e.__h = v; } }
+  function utc(sec) { return new Date(sec * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC"; }
+
+  // ---------------------------------------------------------------- per-scenario precomputation
+  var SC = D.scenarios.map(prep);
+  function prep(s) {
+    var nW = s.n_windows, k, w, total = [], yMax = 1, pfMax = 1;
+    for (k = 0; k < NK; k++) { var a = 0, c = s.counts[k]; for (w = 0; w < nW; w++) a += c[w]; total.push(a); }
+    var injWK = {}, injW = new Int32Array(nW);
+    s.injected.forEach(function (r) { injW[r[0]] += r[2]; injWK[r[0] * NK + r[1]] = r[2]; });
+    var pfLegit = new Int32Array(nW), pfInj = new Int32Array(nW), pfW = new Int32Array(s.pf.length);
+    s.pf.forEach(function (r, i) { pfLegit[r[0]] += r[2] - r[3]; pfInj[r[0]] += r[3]; pfW[i] = r[0]; });
+    var cumL = new Int32Array(nW + 1), cumI = new Int32Array(nW + 1);
+    for (w = 0; w < nW; w++) { cumL[w + 1] = cumL[w] + pfLegit[w]; cumI[w + 1] = cumI[w] + pfInj[w]; pfMax = Math.max(pfMax, pfLegit[w], pfInj[w]); }
+    var evKeys = [];
+    s.events.forEach(function (e) { var i = KEYS.indexOf(e.key); if (evKeys.indexOf(i) < 0) evKeys.push(i); });
+    var byTotal = [];
+    for (k = 0; k < NK; k++) if (total[k] > 0) byTotal.push(k);
+    byTotal.sort(function (x, y) { return total[y] - total[x] || x - y; });
+    var shown = evKeys.concat(byTotal.filter(function (x) { return evKeys.indexOf(x) < 0; })).slice(0, 6);
+    shown.forEach(function (x) { for (w = 0; w < nW; w++) yMax = Math.max(yMax, s.counts[x][w]); yMax = Math.max(yMax, CEIL[x]); });
+    var injF = 0, injS = 0;
+    s.episodes.forEach(function (e) { injF += e.injected_frames; injS += e.end - e.start; });
+    return { s: s, nW: nW, dur: s.duration_s, total: total, injW: injW, injWK: injWK, pfLegit: pfLegit, pfInj: pfInj,
+             pfW: pfW, cumL: cumL, cumI: cumI, pfMax: pfMax, shown: shown, focus: shown[0], yMax: yMax,
+             injRate: injS > 0 ? injF / injS : 0, frameRate: s.totals.frames / s.duration_s };
+  }
+
+  // ---------------------------------------------------------------- state
+  var st = { i: 0, t: 0, playing: false, speed: 1, compare: false };
+  var dirty = true, hover = null;
+  function P() { return SC[st.i]; }
+  function doneW(p) { return Math.max(0, Math.min(p.nW, Math.floor(st.t / W + EPS))); }    // windows whose end has passed
+  function seen(e) { return e.t <= st.t + EPS; }
+  function openEvents(p) { return p.s.events.filter(function (e) { return seen(e) && st.t < e.close - EPS; }); }
+  function activeEpisode(p) {
+    for (var j = 0; j < p.s.episodes.length; j++) { var e = p.s.episodes[j]; if (e.start <= st.t && st.t <= e.end) return j; }
+    return -1;
+  }
+
+  // ---------------------------------------------------------------- static parts
+  function buildStatic() {
+    var tabs = $("scen-tabs");
+    SC.forEach(function (p, i) {
+      var b = document.createElement("button");
+      b.textContent = TAB[p.s.id] || p.s.title; b.dataset.i = i; b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", function () { select(i, 0); });
+      tabs.appendChild(b);
+    });
+    var sp = $("speeds");
+    SPEEDS.forEach(function (x) {
+      var b = document.createElement("button");
+      b.textContent = x + "×"; b.dataset.x = x; b.setAttribute("aria-label", "Speed " + x + " times");
+      b.addEventListener("click", function () { st.speed = x; syncControls(); writeHash(); });
+      sp.appendChild(b);
+    });
+    var pa = H.per_attack, lat = H.latency_ms, fe = H.false_events, pf = H.per_frame;
+    $("kpis").innerHTML =
+      tile("t-good", "Attack episodes detected", fmt(H.detected) + '<span class="u">/ ' + fmt(H.episodes) + "</span>",
+           "DoS " + pa.dos.detected + " · fuzzing " + pa.fuzzy.detected + " · gear " + pa.gear.detected + " · RPM " + pa.rpm.detected +
+           " · one event per episode") +
+      tile("t-good", "False events, attack-free test traffic", fmt(fe.events) + '<span class="u">in ' + fmt(Math.round(fe.attack_free_s)) + " s</span>",
+           "95 % upper bound <b>&lt; " + fe.per_hour_95_upper + " / h</b>" + (H.cross_day ? " · cross-day capture: " + H.cross_day.false_events + " in " + Math.round(H.cross_day.attack_free_s) + " s" : "")) +
+      tile("", "Detection latency", Math.round(lat.p50) + '<span class="u">ms p50</span>',
+           "p99 <b>" + Math.round(lat.p99) + " ms</b> · max " + Math.round(lat.max) + " ms · first injected frame → event") +
+      tile("t-base", "Per-frame baseline (autoencoder)", f1(pf.normal_capture_per_s) + '<span class="u">false alarms / s</span>',
+           "on the attack-free capture · gear: <b>" + fmt(pf.gear_injected_flagged) + " of " + fmt(pf.gear_injected_test_frames) + "</b> injected frames flagged");
+    $("kpi-src").textContent = "Headline numbers: the whole time-split test part (" + fmt(H.episodes) + " attack episodes, last 30 % of every recording), from bench/hcrl/windowed/metrics.json. The replays below are stretches of the same test part.";
+    $("rule-txt").textContent = "Rule: an event is raised when an ID's frame count exceeds its learned ceiling in at least " + RULE.k + " of " + RULE.n +
+      " consecutive " + D.window_ms + " ms windows; it closes after " + (RULE.quiet * W).toFixed(1) + " s without excess. The ceiling is the most frames the ID sent in any attack-free training window.";
+    $("about-detail").innerHTML = "<b>The two detectors.</b> <i>Windowed</i>: per-ID frame counts in " + D.window_ms + " ms windows against the learned ceiling (" +
+      Math.max.apply(null, CEIL) + " frames for the busiest IDs, 0 for IDs never seen in normal traffic), plus the " + RULE.k + "-of-" + RULE.n + " rule. <i>Per-frame autoencoder</i>: " +
+      "the time-split model from the README; every frame whose reconstruction error exceeds " + D.ae_threshold.toFixed(4) +
+      " (99.5th percentile of normal training frames) is an alarm. Per-frame alarms are drawn per 100 ms window here; inside the window each one fired on its own frame.";
+    buildOverview();
+  }
+  function tile(cls, k, v, foot) {
+    return '<div class="tile ' + cls + '"><span class="sevbar"></span><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="foot">' + foot + "</div></div>";
+  }
+
+  function buildOverview() {
+    var body = $("ov-body"), html = "";
+    SC.forEach(function (p, i) {
+      var n = p.s.totals;
+      html += '<tr data-i="' + i + '" tabindex="0"><td>' + esc(TAB[p.s.id] || p.s.title) + '<br><small>' + f1(p.dur) + " s</small></td>" +
+        '<td><canvas data-i="' + i + '"></canvas></td><td class="r">' + n.episodes + '</td><td class="r">' + n.events +
+        ' <small>(' + n.false_events + ')</small></td><td class="r">' + fmt(n.pf_alarms) + ' <small>(' + fmt(n.pf_alarms_legit) + ")</small></td></tr>";
+    });
+    body.innerHTML = html;
+    Array.prototype.forEach.call(body.querySelectorAll("tr"), function (tr) {
+      var go = function () { select(+tr.dataset.i, 0); };
+      tr.addEventListener("click", go);
+      tr.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
+    });
+  }
+  function drawOverview() {
+    var maxDur = Math.max.apply(null, SC.map(function (p) { return p.dur; }));
+    Array.prototype.forEach.call($("ov-body").querySelectorAll("canvas"), function (cv) {
+      var p = SC[+cv.dataset.i], g = fit(cv, 22), ctx = g.ctx, cw = g.w * p.dur / maxDur;
+      var X = function (t) { return t / p.dur * cw; };
+      ctx.fillStyle = "#0e1620"; ctx.fillRect(0, 0, cw, 22);
+      p.s.episodes.forEach(function (e) { ctx.fillStyle = "rgba(144,133,233,.35)"; ctx.fillRect(X(e.start), 0, Math.max(1, X(e.end) - X(e.start)), 22); });
+      ctx.fillStyle = C.pfLegit;
+      for (var w = 0; w < p.nW; w++) if (p.pfLegit[w] > 0) ctx.fillRect(X(w * W), 17, Math.max(1, X(W)), 5);
+      ctx.fillStyle = C.crit;
+      p.s.events.forEach(function (e) { ctx.fillRect(Math.round(X(e.t)) - 1, 0, 2, 14); });
+    });
+  }
+
+  // ---------------------------------------------------------------- canvas helpers
+  function fit(cv, cssH) {
+    var dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 300, ctx = cv.getContext("2d");
+    if (cv.style.height !== cssH + "px") cv.style.height = cssH + "px";
+    var pw = Math.max(1, Math.round(w * dpr)), ph = Math.max(1, Math.round(cssH * dpr));
+    if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, cssH);
+    return { w: w, h: cssH, ctx: ctx };
+  }
+  function viewRange(p) {
+    var span = Math.min(VIEW_S, p.dur), x1 = Math.min(p.dur, Math.max(span, st.t));
+    return [x1 - span, x1];
+  }
+  function stairs(ctx, arr, wa, wb, X, Y, color, lw) {
+    if (wb <= wa) return;
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    for (var w = wa; w < wb; w++) {
+      var y = Y(arr[w]), xa = X(w * W), xb = X((w + 1) * W);
+      if (w === wa) ctx.moveTo(xa, y); else ctx.lineTo(xa, y);
+      ctx.lineTo(xb, y);
+    }
+    ctx.stroke();
+  }
+  function label(ctx, txt, x, y, fg, bg, border) {
+    ctx.font = "600 11px " + MONO;
+    var tw = ctx.measureText(txt).width + 10;
+    ctx.fillStyle = bg; ctx.strokeStyle = border; ctx.lineWidth = 1;
+    roundRect(ctx, x, y, tw, 17, 4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = fg; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(txt, x + 5, y + 9);
+    return tw;
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function keyLabel(k) { return k === UNK ? "unknown ID" : KEYS[k]; }
+
+  // ---------------------------------------------------------------- main chart
+  var gMain = null;
+  function mainH() { return window.innerWidth < 700 ? 220 : window.innerHeight < 820 ? 236 : 270; }   // short laptop screens: keep the chart above the fold
+  function drawMain() {
+    var p = P(), s = p.s, g = fit($("cv-main"), mainH()), ctx = g.ctx;
+    var L = 44, R = 12, T = 26, B = 22, pw = g.w - L - R, ph = g.h - T - B;
+    var vr = viewRange(p), x0 = vr[0], x1 = vr[1];
+    var X = function (t) { return L + (t - x0) / (x1 - x0) * pw; };
+    var ly = Math.log2(p.yMax * 1.3 + 1);                  // headroom above the highest count or ceiling
+    var Y = function (c) { return T + ph * (1 - Math.log2(c + 1) / ly); };
+    gMain = { L: L, R: R, T: T, pw: pw, ph: ph, x0: x0, x1: x1, h: g.h };
+    // grid + y ticks (log scale)
+    ctx.font = "10.5px " + MONO; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.lineWidth = 1;
+    TICKS.forEach(function (v) {
+      if (v > p.yMax) return;
+      var y = Math.round(Y(v)) + 0.5;
+      ctx.strokeStyle = C.grid; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke();
+      ctx.fillStyle = C.tick; ctx.fillText(String(v), L - 7, y);
+    });
+    ctx.save(); ctx.translate(11, T + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.fillStyle = C.tick;
+    ctx.font = "10px " + MONO; ctx.fillText("frames / 100 ms (log)", 0, 0); ctx.restore();
+    // x ticks
+    ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = C.tick; ctx.font = "10.5px " + MONO;
+    ctx.strokeStyle = C.axis; ctx.beginPath(); ctx.moveTo(L, T + ph + 0.5); ctx.lineTo(L + pw, T + ph + 0.5); ctx.stroke();
+    for (var tt = Math.ceil(x0 / 5) * 5; tt <= x1 + EPS; tt += 5) {
+      var xx = Math.round(X(tt)) + 0.5, lab = tt + " s", lw2 = ctx.measureText(lab).width / 2;
+      ctx.beginPath(); ctx.moveTo(xx, T + ph); ctx.lineTo(xx, T + ph + 4); ctx.stroke();
+      ctx.fillText(lab, Math.min(g.w - lw2 - 1, Math.max(L + lw2 - 4, xx)), T + ph + 6);
+    }
+
+    ctx.save(); ctx.beginPath(); ctx.rect(L, 0, pw, T + ph); ctx.clip();
+    // ground-truth injection intervals, as far as the replay has got
+    s.episodes.forEach(function (e) {
+      var a = Math.max(e.start, x0), b = Math.min(e.end, st.t, x1);
+      if (b <= a) return;
+      ctx.fillStyle = "rgba(144,133,233,.13)"; ctx.fillRect(X(a), T, X(b) - X(a), ph);
+      ctx.fillStyle = C.inj; ctx.fillRect(X(a), T + ph - 3, X(b) - X(a), 3);
+    });
+    var wd = doneW(p), wa = Math.max(0, Math.floor(x0 / W)), wb = Math.min(wd, Math.ceil(x1 / W));
+    p.shown.forEach(function (k) { if (k !== p.focus) stairs(ctx, s.counts[k], wa, wb, X, Y, C.other, 1); });
+    // ceiling of the highlighted ID
+    var cy = Math.round(Y(CEIL[p.focus])) + 0.5;
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = C.ceil; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(L, cy); ctx.lineTo(L + pw, cy); ctx.stroke(); ctx.setLineDash([]);
+    stairs(ctx, s.counts[p.focus], wa, wb, X, Y, C.focus, 2);
+    for (var w = wa; w < wb; w++) {                       // runs of windows above the ceiling, in red
+      if (s.counts[p.focus][w] <= CEIL[p.focus]) continue;
+      var w2 = w; while (w2 + 1 < wb && s.counts[p.focus][w2 + 1] > CEIL[p.focus]) w2++;
+      stairs(ctx, s.counts[p.focus], w, w2 + 1, X, Y, C.crit, 2.5);
+      w = w2;
+    }
+    // windowed events
+    s.events.forEach(function (e) {
+      if (!seen(e) || e.t < x0 - 3 || e.t > x1) return;
+      var x = Math.round(X(e.t)) + 0.5;
+      ctx.strokeStyle = C.crit; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, T + ph); ctx.stroke();
+      label(ctx, "EVENT " + (e.key === "unknown ID" ? "unknown ID" : e.key), x - 1, 2, "#ffe1e2", "#3a1419", C.crit);
+    });
+    // playhead
+    if (st.t > x0 && st.t <= x1) {
+      var px = Math.round(X(st.t)) + 0.5;
+      ctx.strokeStyle = "rgba(219,230,241,.45)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, T); ctx.lineTo(px, T + ph); ctx.stroke();
+    }
+    // hover crosshair
+    if (hover && hover.cv === "main" && hover.w != null) {
+      var hx = X(hover.w * W), hw = X((hover.w + 1) * W) - hx;
+      ctx.fillStyle = "rgba(219,230,241,.07)"; ctx.fillRect(hx, T, Math.max(1, hw), ph);
+    }
+    ctx.restore();
+    // ceiling label, outside the clip so it can sit on the right edge
+    var ct = "ceiling " + CEIL[p.focus] + " · " + keyLabel(p.focus);
+    ctx.font = "10.5px " + MONO; var ctw = ctx.measureText(ct).width;
+    ctx.fillStyle = "rgba(17,26,36,.85)"; ctx.fillRect(L + pw - ctw - 10, cy - 17, ctw + 8, 14);
+    ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillStyle = C.ceil;
+    ctx.fillText(ct, L + pw - 6, cy - 4);
+  }
+
+  // ---------------------------------------------------------------- comparison lanes
+  function drawCmp() {
+    var p = P(), s = p.s, g = fit($("cv-cmp"), 132), ctx = g.ctx;
+    var L = 44, R = 12, pw = g.w - L - R, vr = viewRange(p), x0 = vr[0], x1 = vr[1];
+    var X = function (t) { return L + (t - x0) / (x1 - x0) * pw; };
+    var rows = [{ y: 16, h: 24 }, { y: 58, h: 26 }, { y: 102, h: 26 }];
+    var names = ["windowed detector · events", "per-frame autoencoder · alarms on legitimate frames", "per-frame autoencoder · alarms on injected frames"];
+    ctx.font = "10.5px " + MONO; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+    rows.forEach(function (r, i) {
+      ctx.fillStyle = "#0e1620"; ctx.fillRect(L, r.y, pw, r.h);
+      ctx.fillStyle = C.tick; ctx.fillText(names[i], L + 2, r.y - 4);
+    });
+    ctx.save(); ctx.beginPath(); ctx.rect(L, 0, pw, g.h); ctx.clip();
+    s.episodes.forEach(function (e) {
+      var a = Math.max(e.start, x0), b = Math.min(e.end, st.t, x1);
+      if (b <= a) return;
+      ctx.fillStyle = "rgba(144,133,233,.16)";
+      rows.forEach(function (r) { ctx.fillRect(X(a), r.y, X(b) - X(a), r.h); });
+    });
+    var wd = doneW(p), wa = Math.max(0, Math.floor(x0 / W)), wb = Math.min(wd, Math.ceil(x1 / W)), lm = Math.log2(p.pfMax + 1);
+    var bw = Math.max(1, X(W) - X(0) - (X(W) - X(0) > 3 ? 0.6 : 0));
+    for (var w = wa; w < wb; w++) {
+      [[p.pfLegit[w], rows[1], C.pfLegit], [p.pfInj[w], rows[2], C.pfInj]].forEach(function (q) {
+        if (!q[0]) return;
+        var h = Math.max(3, q[1].h * Math.log2(q[0] + 1) / lm);
+        ctx.fillStyle = q[2]; ctx.fillRect(X(w * W), q[1].y + q[1].h - h, bw, h);
+      });
+    }
+    s.events.forEach(function (e) {
+      if (!seen(e) || e.t < x0 - 3 || e.t > x1) return;
+      var x = Math.round(X(e.t));
+      ctx.fillStyle = C.crit; ctx.fillRect(x - 1, rows[0].y, 2.5, rows[0].h);
+      ctx.font = "600 10.5px " + MONO; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffd0d2";
+      ctx.fillText(e.key === "unknown ID" ? "unknown ID" : e.key, x + 5, rows[0].y + rows[0].h / 2);
+    });
+    if (hover && hover.cv === "cmp" && hover.w != null) {
+      ctx.fillStyle = "rgba(219,230,241,.08)"; ctx.fillRect(X(hover.w * W), 0, Math.max(1, X(W) - X(0)), g.h);
+    }
+    ctx.restore();
+    var wd2 = doneW(p), ne = p.s.events.filter(seen).length;
+    setText("cmp-sum", "so far: " + ne + " event" + (ne === 1 ? "" : "s") + " vs " + fmt(p.cumL[wd2] + p.cumI[wd2]) + " per-frame alarms (" + fmt(p.cumL[wd2]) + " on legitimate frames)");
+  }
+
+  // ---------------------------------------------------------------- scrubber
+  function drawScrub() {
+    var p = P(), s = p.s, cv = $("cv-scrub"), g = fit(cv, 38), ctx = g.ctx, pad = 6, pw = g.w - 2 * pad;
+    var X = function (t) { return pad + t / p.dur * pw; };
+    ctx.fillStyle = "#0e1620"; roundRect(ctx, 0, 0, g.w, 38, 7); ctx.fill();
+    s.episodes.forEach(function (e) {
+      ctx.fillStyle = "rgba(144,133,233,.30)"; ctx.fillRect(X(e.start), 8, Math.max(1, X(e.end) - X(e.start)), 22);
+      ctx.fillStyle = C.inj; ctx.fillRect(X(e.start), 27, Math.max(1, X(e.end) - X(e.start)), 3);
+    });
+    ctx.fillStyle = "rgba(47,214,192,.10)"; ctx.fillRect(pad, 8, X(st.t) - pad, 22);
+    if (st.compare) {
+      ctx.fillStyle = C.pfLegit;
+      for (var w = 0; w < doneW(p); w++) if (p.pfLegit[w] > 0) ctx.fillRect(X(w * W), 31, Math.max(1, X(W) - X(0)), 4);
+    }
+    ctx.fillStyle = C.crit;
+    s.events.forEach(function (e) { if (seen(e)) ctx.fillRect(Math.round(X(e.t)) - 1, 4, 2, 26); });
+    var px = Math.round(X(st.t));
+    ctx.fillStyle = C.head; ctx.fillRect(px - 1, 2, 2, 34);
+    ctx.beginPath(); ctx.arc(px, 4, 4, 0, 7); ctx.fill();
+    cv.setAttribute("aria-valuemax", p.dur.toFixed(1)); cv.setAttribute("aria-valuenow", st.t.toFixed(1));
+    cv.setAttribute("aria-valuetext", f1(st.t) + " of " + f1(p.dur) + " seconds");
+  }
+
+  // ---------------------------------------------------------------- panels
+  var ICO_OK = '<circle cx="12" cy="12" r="9" stroke="#45c26b"/><path d="M8 12.5l2.6 2.6L16 9.8" stroke="#45c26b"/>';
+  var ICO_CR = '<path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0z" stroke="#f0585b"/><path d="M12 9v4M12 17h.01" stroke="#f0585b"/>';
+  function updatePanels() {
+    var p = P(), s = p.s, open = openEvents(p), alert = open.length > 0, wd = doneW(p);
+    var vis = s.events.filter(seen), ep = activeEpisode(p);
+    setHTML("time", f1(st.t) + " <small>/ " + f1(p.dur) + " s</small>");
+    setText("h-clock", utc(s.capture_start_unix + st.t));
+    setText("h-threat", alert ? "ALERT" : "NORMAL");
+    $("h-threat").style.color = alert ? "var(--crit)" : "var(--good)";
+    $("h-dot").className = "dot" + (alert ? " crit" : "");
+    setText("h-events", vis.length);
+    setText("h-pf", fmt(p.cumL[wd] + p.cumI[wd]));
+    // threat panel
+    var ico = $("lvl-ico"), want = alert ? ICO_CR : ICO_OK;
+    if (ico.__h !== want) { ico.innerHTML = want; ico.__h = want; }
+    $("lvl-txt").className = "lvl " + (alert ? "cr" : "ok"); setText("lvl-txt", alert ? "ALERT" : "NORMAL");
+    if (alert) {
+      var e = open[open.length - 1];
+      setHTML("lvl-sub", "Open event on <b>" + esc(e.key) + "</b>, raised at " + f1(e.t) + " s" +
+        (e.latency_ms != null ? ", " + Math.round(e.latency_ms) + " ms after the first injected frame." : "."));
+    } else {
+      setHTML("lvl-sub", vis.length ? "No open event. Last event closed at " + f1(vis[vis.length - 1].close) + " s." : "No event so far in this replay.");
+    }
+    var gt = $("gt");
+    gt.className = "gt" + (ep >= 0 ? " on" : "");
+    setHTML("gt-txt", ep >= 0 ? "Ground truth now: <b>injecting</b> (" + esc(ATT[s.episodes[ep].label] || s.episodes[ep].label) + ", episode " + (ep + 1) + ") <small>· dataset label, not seen by the detector</small>"
+                              : "Ground truth now: no injection <small>· dataset label, not seen by the detector</small>");
+    var started = s.episodes.filter(function (e) { return e.start <= st.t; }).length;
+    var det = {}; vis.forEach(function (e) { if (e.episode >= 0) det[e.episode] = 1; });
+    var nFalse = vis.filter(function (e) { return e.episode < 0; }).length;
+    setText("c-ep", started); setText("c-det", Object.keys(det).length); setText("c-ev", vis.length);
+    setText("c-fe", nFalse); $("c-fe").className = nFalse ? "m-bad" : "m-ok";
+    setText("c-pf", fmt(p.cumL[wd] + p.cumI[wd])); setText("c-pfl", fmt(p.cumL[wd]));
+    $("c-pfl").style.color = p.cumL[wd] ? "var(--pf-legit)" : "";
+    // alert banner + driver telltale
+    var ab = $("alert");
+    ab.className = "alert" + (alert ? "" : " ok");
+    if (alert) {
+      var e2 = open[open.length - 1], k2 = KEYS.indexOf(e2.key);
+      setHTML("alert-txt", "<b>Windowed detector: event on " + esc(e2.key) + "</b> — more frames than its ceiling (" + CEIL[k2] +
+        " per 100 ms) in at least " + RULE.k + " of " + RULE.n + " windows. Raised at " + f1(e2.t) + " s" +
+        (e2.latency_ms != null ? ", " + Math.round(e2.latency_ms) + " ms after the attack started." : "."));
+      setText("alert-tag", e2.episode >= 0 ? "ground truth: " + (ATT[e2.matched] || e2.matched) + " episode" : "ground truth: no attack (false alarm)");
+    } else {
+      setHTML("alert-txt", "<b>No open event.</b> The windowed detector checks " + (NK - 1) + " known CAN IDs and one shared key for unknown IDs, every " + D.window_ms + " ms.");
+      setText("alert-tag", ep >= 0 ? "ground truth: injecting" : "ground truth: no injection");
+    }
+    $("lamp").className = "lamp" + (alert ? "" : " off");
+    setText("lamp-txt", alert ? "Service: vehicle check" : "No telltale");
+    updateFeeds(p, vis, wd);
+    updateTable(p, wd);
+  }
+
+  var feedSig = "", feedI = -1, feedN = 0, pfSig = "", lastFeedAt = 0;
+  function updateFeeds(p, vis, wd) {
+    var s = p.s, closed = vis.filter(function (e) { return st.t >= e.close - EPS; }).length;
+    var sig = st.i + ":" + vis.length + ":" + closed;
+    if (sig !== feedSig) {
+      var prevN = feedI === st.i ? feedN : vis.length;           // rows added since the last render flash once
+      feedSig = sig; feedI = st.i; feedN = vis.length;
+      var html = "";
+      for (var j = vis.length - 1; j >= 0; j--) {
+        var e = vis[j], k = KEYS.indexOf(e.key), idc = esc(e.key);
+        if (e.unknown_ids) idc = "unknown ID<br><small>" + (e.unknown_ids.distinct === 1 ? esc(e.unknown_ids.top[0][0]) : fmt(e.unknown_ids.distinct) + " IDs") + "</small>";
+        var gtc = e.episode >= 0 ? '<span class="m-ok">' + esc(SHORT[e.matched] || e.matched) + "</span> <small>ep " + (e.episode + 1) + "</small>" : '<span class="m-bad">none: false alarm</span>';
+        var lasted = st.t >= e.close - EPS ? f1(e.end - e.t) + " s" : '<small>open</small>';
+        html += '<tr' + (j >= prevN ? ' class="new"' : "") + ' data-t="' + e.t + '" data-key="' + esc(e.key) + '" title="' + e.anomalous_windows + ' windows above the ceiling during the event"><td>' + f1(e.t) + "</td><td>" + idc + '</td><td class="r">' +
+          (e.latency_ms != null ? Math.round(e.latency_ms) + " ms" : "–") + "</td><td>" + gtc + '</td><td class="r c-lasted">' + lasted + '</td><td class="r">' + e.peak_count + " / " + CEIL[k] + "</td></tr>";
+      }
+      if (!vis.length) html = '<tr class="empty"><td colspan="6">' + (p.s.episodes.length ? "No event yet. Press Play." :
+        (st.t >= p.dur - EPS ? "No event in " + f1(p.dur) + " s of attack-free traffic." : "No event so far. This is attack-free traffic: any event would be a false alarm.")) + "</td></tr>";
+      $("ev-body").innerHTML = html;
+      setText("ev-cnt", vis.length + " event" + (vis.length === 1 ? "" : "s"));
+    }
+    if (!st.compare) return;
+    var now = performance.now(), sig2 = st.i + ":" + wd;
+    if (sig2 === pfSig || (st.playing && now - lastFeedAt < 120)) return;
+    pfSig = sig2; lastFeedAt = now;
+    var hi = lowerBound(p.pfW, wd), lo = Math.max(0, hi - 150), rows = "";
+    for (var i = hi - 1; i >= lo; i--) {
+      var r = s.pf[i], legit = r[2] - r[3];
+      var what = r[3] === 0 ? '<span class="vd pfl"></span>legitimate' : legit === 0 ? '<span class="vd pfi"></span>injected' : '<span class="vd pfl"></span>' + legit + " legit + " + r[3] + " injected";
+      rows += "<tr><td>" + f1((r[0] + 1) * W) + "</td><td>" + esc(keyLabel(r[1])) + '</td><td class="r">' + r[2] + "</td><td>" + what + "</td></tr>";
+    }
+    if (!rows) rows = '<tr class="empty"><td colspan="4">No per-frame alarm yet.</td></tr>';
+    else if (lo > 0) rows += '<tr class="empty"><td colspan="4">… ' + fmt(lo) + " earlier rows not shown</td></tr>";
+    $("pf-body").innerHTML = rows;
+    setText("pf-cnt", fmt(p.cumL[wd] + p.cumI[wd]) + " alarms · " + fmt(p.cumL[wd]) + " on legitimate frames");
+  }
+  function lowerBound(a, v) { var lo = 0, hi = a.length; while (lo < hi) { var m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo; }
+
+  var tvSig = "";
+  function updateTable(p, wd) {
+    if (!$("tv").open) return;
+    var sig = st.i + ":" + wd;
+    if (sig === tvSig) return;
+    tvSig = sig;
+    var rows = [], s = p.s;
+    for (var w = wd - 1; w >= 0 && rows.length < 400; w--)
+      for (var k = 0; k < NK; k++) {
+        var c = s.counts[k][w];
+        if (c > CEIL[k]) rows.push("<tr><td>" + f1((w + 1) * W) + "</td><td>" + esc(keyLabel(k)) + '</td><td class="r">' + c + '</td><td class="r">' + CEIL[k] + '</td><td class="r">' + (p.injWK[w * NK + k] || 0) + "</td></tr>");
+      }
+    $("tv-body").innerHTML = rows.join("") || '<tr class="empty"><td colspan="5">No window above its ceiling so far.</td></tr>';
+  }
+
+  function updateChips() {
+    var p = P(), html = "";
+    p.shown.forEach(function (k) { html += '<button class="idchip" data-k="' + k + '" aria-pressed="' + (k === p.focus) + '" title="' + fmt(p.total[k]) + ' frames in this replay">' + esc(keyLabel(k)) + "</button>"; });
+    $("idchips").innerHTML = html;
+    Array.prototype.forEach.call($("idchips").querySelectorAll("button"), function (b) {
+      b.addEventListener("click", function () { P().focus = +b.dataset.k; updateChips(); dirty = true; });
+    });
+    setText("lg-focus", keyLabel(p.focus) + " (highlighted)");
+  }
+
+  function describe() {
+    var p = P(), s = p.s, n = s.totals, id = s.id, txt;
+    var where = s.recording + ", " + f1(s.t_into_test) + "–" + f1(s.t_into_test + s.duration_s) + " s into its test part, recorded " + utc(s.capture_start_unix).slice(0, 16) + " UTC";
+    var inj = fmt(Math.round(p.injRate)) + " injected frames/s during the episodes";
+    if (id === "dos") txt = "<b>DoS flood.</b> Bursts of frames on ID <b>0x000</b>, the highest CAN priority, which never occurs in normal traffic, so they count on the shared unknown-ID key (ceiling 0). " + inj + "; the other IDs send fewer frames during the bursts (grey lines).";
+    else if (id === "fuzzy") txt = "<b>Fuzzing.</b> Bursts of frames with random IDs and payloads; almost all IDs never occur in normal traffic and count on the unknown-ID key (ceiling 0). " + inj + ".";
+    else if (id === "gear") txt = "<b>Gear spoofing.</b> One fixed frame on the legitimate ID <b>0x43f</b>, injected on top of the ECU's own traffic. The per-frame autoencoder flags none of the injected frames (legitimate ID, plausible payload); the count per 100 ms gives them away. " + inj + ".";
+    else if (id === "rpm") txt = "<b>RPM spoofing.</b> Forged frames on the legitimate ID <b>0x316</b>, injected on top of its normal traffic. " + inj + ".";
+    else txt = "<b>Attack-free drive.</b> The separate attack-free capture (another recording day), first " + f1(s.duration_s) + " s of its test part. Every alarm here is a false alarm.";
+    $("scen-desc").innerHTML = txt + " <span style=\"color:var(--faint)\">" + fmt(n.frames) + " frames (" + fmt(Math.round(p.frameRate)) + "/s), " +
+      n.episodes + " attack episode" + (n.episodes === 1 ? "" : "s") + " · " + esc(where) + ".</span>";
+  }
+
+  // ---------------------------------------------------------------- tooltip
+  function onHover(ev, which) {
+    var p = P(), cv = ev.currentTarget, rect = cv.getBoundingClientRect();
+    if (!gMain) return;
+    var x = ev.clientX - rect.left, t = gMain.x0 + (x - gMain.L) / gMain.pw * (gMain.x1 - gMain.x0), w = Math.floor(t / W + EPS);
+    if (x < gMain.L || x > gMain.L + gMain.pw || w < 0 || w >= doneW(p)) { hideTip(); return; }
+    hover = { cv: which, w: w }; dirty = true;
+    var s = p.s, f = p.focus, c = s.counts[f][w], inj = p.injWK[w * NK + f] || 0;
+    var html = '<div class="hd">' + f1(w * W) + "–" + f1((w + 1) * W) + " s</div>";
+    html += '<div class="row"><i style="background:' + C.focus + '"></i>' + esc(keyLabel(f)) + '<span class="val">' + c + " / ceiling " + CEIL[f] + "</span></div>";
+    if (c > CEIL[f]) html += '<div class="row" style="color:var(--crit)"><i style="background:' + C.crit + '"></i>above ceiling</div>';
+    if (inj) html += '<div class="row"><i style="background:' + C.inj + '"></i>of which injected (ground truth)<span class="val">' + inj + "</span></div>";
+    p.shown.forEach(function (k) { if (k !== f) html += '<div class="row"><i style="background:' + C.other + '"></i>' + esc(keyLabel(k)) + '<span class="val">' + s.counts[k][w] + (s.counts[k][w] > CEIL[k] ? " > " + CEIL[k] : "") + "</span></div>"; });
+    if (st.compare || which === "cmp")
+      html += '<div class="row"><i style="background:' + C.pfLegit + '"></i>per-frame alarms, legit<span class="val">' + p.pfLegit[w] + '</span></div><div class="row"><i style="background:' + C.pfInj + '"></i>per-frame alarms, injected<span class="val">' + p.pfInj[w] + "</span></div>";
+    s.events.forEach(function (e) { if (Math.abs(e.t - (w + 1) * W) < W / 2) html += '<div class="row" style="color:#ffd0d2"><i style="background:' + C.crit + '"></i><b>event raised</b> on ' + esc(e.key) + "</div>"; });
+    var tip = $("tip"); tip.innerHTML = html; tip.hidden = false;
+    var tw = tip.offsetWidth, th = tip.offsetHeight, lx = ev.clientX + 14, ly = ev.clientY + 14;
+    if (lx + tw > window.innerWidth - 8) lx = ev.clientX - tw - 14;
+    if (ly + th > window.innerHeight - 8) ly = ev.clientY - th - 14;
+    tip.style.left = Math.max(8, lx) + "px"; tip.style.top = Math.max(8, ly) + "px";
+  }
+  function hideTip() { $("tip").hidden = true; if (hover) { hover = null; dirty = true; } }
+
+  // ---------------------------------------------------------------- control
+  function select(i, t) {
+    if (i < 0 || i >= SC.length) return;
+    st.i = i; st.t = Math.max(0, Math.min(t || 0, SC[i].dur)); feedSig = ""; pfSig = ""; tvSig = "";
+    describe(); updateChips(); syncControls(); writeHash(); dirty = true;
+  }
+  function seek(t) { st.t = Math.max(0, Math.min(t, P().dur)); dirty = true; if (!st.playing) writeHash(); }
+  function setPlaying(on) {
+    if (on && st.t >= P().dur - EPS) st.t = 0;
+    st.playing = on; lastTs = null; syncControls(); writeHash(); dirty = true;
+  }
+  function setCompare(on) {
+    st.compare = on; $("cmp").checked = on; $("cmp-lanes").hidden = !on; $("pf-feed").hidden = !on; $("h-pf-chip").hidden = !on;
+    $("feeds").className = "feeds" + (on ? " two" : "");
+    Array.prototype.forEach.call(document.querySelectorAll(".cmp-only"), function (e) { e.hidden = !on; });
+    pfSig = ""; writeHash(); dirty = true;
+  }
+  function syncControls() {
+    Array.prototype.forEach.call($("scen-tabs").children, function (b) { b.setAttribute("aria-pressed", String(+b.dataset.i === st.i)); });
+    Array.prototype.forEach.call($("speeds").children, function (b) { b.setAttribute("aria-pressed", String(+b.dataset.x === st.speed)); });
+    Array.prototype.forEach.call($("ov-body").children, function (tr) { tr.setAttribute("aria-current", String(+tr.dataset.i === st.i)); });
+    $("play-ico").innerHTML = st.playing ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4v16l13-8z"/>';
+    setText("play-txt", st.playing ? "Pause" : "Play"); $("play").setAttribute("aria-label", st.playing ? "Pause" : "Play");
+  }
+  var hashTimer = null;
+  function writeHash() {
+    clearTimeout(hashTimer);
+    hashTimer = setTimeout(function () {
+      var h = "#s=" + P().s.id + (st.playing ? "" : "&t=" + f1(st.t)) + "&speed=" + st.speed + (st.compare ? "&compare=1" : "");
+      try { history.replaceState(null, "", h); lastHash = location.hash; } catch (e) { /* file:// in some browsers */ }
+    }, 250);
+  }
+  function readHash() {
+    var q = {};
+    location.hash.replace(/^#/, "").split("&").forEach(function (kv) { var a = kv.split("="); if (a[0]) q[a[0]] = decodeURIComponent(a[1] || ""); });
+    return q;
+  }
+
+  // scrubbing
+  function scrubAt(ev) {
+    var r = $("cv-scrub").getBoundingClientRect(), pad = 6;
+    seek((ev.clientX - r.left - pad) / (r.width - 2 * pad) * P().dur);
+  }
+  var scrubbing = false;
+  $("cv-scrub").addEventListener("pointerdown", function (ev) { scrubbing = true; this.setPointerCapture(ev.pointerId); scrubAt(ev); });
+  $("cv-scrub").addEventListener("pointermove", function (ev) { if (scrubbing) scrubAt(ev); });
+  $("cv-scrub").addEventListener("pointerup", function () { scrubbing = false; writeHash(); });
+  $("cv-scrub").addEventListener("keydown", function (ev) {
+    var d = ev.shiftKey ? 5 : 1;
+    if (ev.key === "ArrowRight") { seek(st.t + d); ev.preventDefault(); }
+    else if (ev.key === "ArrowLeft") { seek(st.t - d); ev.preventDefault(); }
+    else if (ev.key === "Home") { seek(0); ev.preventDefault(); }
+    else if (ev.key === "End") { seek(P().dur); ev.preventDefault(); }
+  });
+  $("play").addEventListener("click", function () { setPlaying(!st.playing); });
+  $("restart").addEventListener("click", function () { seek(0); setPlaying(true); });
+  $("cmp").addEventListener("change", function () { setCompare(this.checked); });
+  $("tv").addEventListener("toggle", function () { tvSig = ""; dirty = true; });
+  ["cv-main", "cv-cmp"].forEach(function (id) {
+    var which = id === "cv-main" ? "main" : "cmp";
+    $(id).addEventListener("pointermove", function (ev) { onHover(ev, which); });
+    $(id).addEventListener("pointerleave", hideTip);
+  });
+  document.addEventListener("keydown", function (ev) {
+    var tag = (ev.target.tagName || "").toLowerCase();
+    if (ev.metaKey || ev.ctrlKey || ev.altKey || tag === "input" || tag === "button" || tag === "tr" || ev.target.getAttribute("role") === "slider") return;
+    if (ev.key === " ") { setPlaying(!st.playing); ev.preventDefault(); }
+    else if (ev.key === "c" || ev.key === "C") setCompare(!st.compare);
+    else if (ev.key === "ArrowRight") seek(st.t + 1);
+    else if (ev.key === "ArrowLeft") seek(st.t - 1);
+  });
+  window.addEventListener("resize", function () { dirty = true; ovDirty = true; });
+
+  // ---------------------------------------------------------------- loop
+  var lastTs = null, ovDirty = true;
+  function frame(ts) {
+    if (st.playing) {
+      if (lastTs != null) {
+        st.t = Math.min(P().dur, st.t + Math.min(0.25, (ts - lastTs) / 1000) * st.speed);
+        if (st.t >= P().dur - EPS) { st.playing = false; syncControls(); writeHash(); }
+      }
+      lastTs = ts; dirty = true;
+    } else lastTs = null;
+    if (dirty) {
+      dirty = false;
+      drawMain(); if (st.compare) drawCmp(); drawScrub(); updatePanels();
+      if (ovDirty) { drawOverview(); ovDirty = false; }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // test / automation hook (used by the headless check; harmless otherwise)
+  window.GUARDCAN_UI = {
+    select: function (id, t) { var i = SC.findIndex(function (p) { return p.s.id === id; }); select(i, t || 0); },
+    seek: seek, play: function () { setPlaying(true); }, pause: function () { setPlaying(false); },
+    speed: function (x) { st.speed = x; syncControls(); }, compare: setCompare,
+    state: function () { var p = P(); return { id: p.s.id, t: st.t, playing: st.playing, speed: st.speed, compare: st.compare, dur: p.dur,
+      events: p.s.events.filter(seen).length, alert: openEvents(p).length > 0 }; }
+  };
+
+  // URL hash: #s=<scenario>&t=<seconds>&speed=<1|5|20>&compare=1. With t the replay opens paused there; without it plays.
+  // No hash at all (the landing view): the gear-spoofing replay at 24 s with the comparison on, paused, so the first
+  // screen already shows four events, an open ALERT and the per-frame alarms next to them.
+  var LANDING = { s: "gear", t: "24", compare: "1" };
+  var lastHash = null;
+  function applyHash() {
+    if (location.hash === lastHash) return;
+    var q = location.hash.replace(/^#/, "") ? readHash() : LANDING;
+    var i = Math.max(0, SC.findIndex(function (p) { return p.s.id === (q.s || "gear"); }));
+    if (q.speed && SPEEDS.indexOf(+q.speed) >= 0) st.speed = +q.speed;
+    st.playing = false;
+    select(i, q.t ? +q.t : 0);
+    setCompare(q.compare === "1");
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setPlaying(!q.t && !reduce && q.play !== "0");
+  }
+  window.addEventListener("hashchange", applyHash);
+
+  buildStatic();
+  applyHash();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

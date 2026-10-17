@@ -6,6 +6,12 @@ A portfolio proof-of-concept that demonstrates both **applied AI** (anomaly dete
 
 > **Status: proof-of-concept.** Not deployed in real vehicles. The CAN-layer detector has now been evaluated **offline on the public HCRL Car-Hacking dataset** (recorded CAN traffic with injected attacks; [results below](#results-on-the-hcrl-car-hacking-dataset)), including its weaknesses, both per frame and as [windowed, event-level detection](#windowed-event-level-detection-hcrl-time-split). The synthetic Car-Hacking-format set (`data/make_synthetic.py`) is kept as a smoke test only. The HPC-engine timings replay synthetic input (timing doesn't depend on the data). The service-oriented (SOME/IP) layer and the fleet scale will be represented with synthetic data, labelled as such. All reported numbers are POC measurements on one machine.
 
+**Live demo: [V-SOC replay console](https://casktech-sys.github.io/guardcan/dashboard/)**. Recorded HCRL traffic
+replayed with the windowed detector's real events, next to the per-frame autoencoder's alarms. A static page; open
+[`dashboard/index.html`](dashboard/index.html) locally if the link isn't live yet ([details](#v-soc-console-replay-of-recorded-hcrl-traffic)).
+
+![V-SOC console replaying recorded gear-spoofing traffic](dashboard/screenshots/replay_gear.gif)
+
 ---
 
 ## Repository layout
@@ -35,6 +41,10 @@ guardcan/
 ├── bench/hcrl/            # results on the HCRL Car-Hacking dataset (metrics, ROC, confusion, epoch study)
 │   └── windowed/          # windowed, event-level detection (metrics.json, charts, cross_day/)
 ├── bench/hpc/             # Week 2: measured results, charts, Nsight Systems profile
+├── dashboard/             # V-SOC console: static replay of recorded HCRL traffic + real detector output
+│   ├── index.html         # the page (no server, no external scripts)
+│   ├── replay_data.js     # exported scenarios (aggregates only), written by export_replay.py
+│   └── export_replay.py   # runs both saved detectors on the test part, checks vs metrics.json, exports
 ├── docs/                  # architecture, compliance mapping, threat model, hpc-engine, windowed-detection
 ├── run_week1.py           # one command: synth data -> features -> train -> eval
 └── run_week2.py           # one command: export weights -> build -> verify -> benchmark
@@ -292,6 +302,35 @@ What this does and doesn't show:
 - **Time split only.** Under the random split every 100 ms window contains training and test frames, so no
   window is held out.
 
+## V-SOC console (replay of recorded HCRL traffic)
+
+[`dashboard/`](dashboard/) is a static web console, one HTML page plus one data file, that replays five stretches
+of the time split's test part with the real detector output: one each of DoS, fuzzing, gear and RPM spoofing
+(53–59 s, 7–9 attack episodes each) and 90 s of the separate attack-free capture. It shows:
+- frames per CAN ID per 100 ms against the learned ceiling, with the ground-truth injection intervals;
+- the windowed detector's events, with their latency from the first injected frame, and the NORMAL / ALERT status;
+- with *Compare* on, the per-frame autoencoder's alarms on the same timeline.
+
+Live: <https://casktech-sys.github.io/guardcan/dashboard/> (after GitHub Pages is enabled), or open
+`dashboard/index.html` from disk.
+
+![Gear spoofing replay: one windowed event per episode on 0x43f, per-frame alarms only on legitimate frames](dashboard/screenshots/gear_compare.png)
+
+What the replays show, measured on them:
+- In the **gear replay** the windowed detector raises 9 events for 9 episodes (217–295 ms after each
+  attack starts). All 119 per-frame alarms in it fall on legitimate frames; none of the 17,765 injected frames is
+  flagged.
+- On **90 s of attack-free traffic**: 0 windowed events against 2,352 per-frame alarms (26 per second).
+
+![Attack-free replay: 0 windowed events, 2,352 per-frame alarms](dashboard/screenshots/attack_free_compare.png)
+
+`python -m dashboard.export_replay --data data/car-hacking` regenerates the data (~140 s). It runs both saved
+detectors on the test part and refuses to write anything unless it reproduces `bench/hcrl/windowed/metrics.json`
+(same 360 windowed events, same per-frame false alarms per recording). It ships aggregates only: counts per ID and
+100 ms window, events and alarm counts, no frames or payloads. The scenarios are picked by a fixed rule, not by
+hand. It is one vehicle at five points in time, and there is no fleet view. Details, sources of every number and
+the GitHub Pages setup: [`dashboard/README.md`](dashboard/README.md).
+
 ## Synthetic smoke test (not a result)
 
 `python run_week1.py` runs on the **synthetic** Car-Hacking-format set (`data/make_synthetic.py`). It checks that the
@@ -382,7 +421,8 @@ No GPU? Use [`engine/colab_benchmark.ipynb`](engine/colab_benchmark.ipynb) on a 
 
 ## Coming in later weeks (see `docs/` and the build spec)
 
-- Week 3: the SOA/Automotive-Ethernet layer (synthetic SOME/IP) + the zero-copy GPU tap, and the live V-SOC dashboard.
+- Week 3: the SOA/Automotive-Ethernet layer (synthetic SOME/IP) + the zero-copy GPU tap. (The V-SOC console exists
+  as a replay of recorded traffic, [above](#v-soc-console-replay-of-recorded-hcrl-traffic); live streaming into it is not built.)
 - Week 4: TensorRT INT8 edge build, Triton/Morpheus framing, packaging.
 
 ## License

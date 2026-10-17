@@ -1,0 +1,590 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>GuardCAN V-SOC</title>
+<style>
+  /* Layout concept: a dark security-operations console. Summary KPIs on top, then the
+     live AI signal (anomaly timeline + threat mix), the two-layer in-vehicle network it
+     watches (CAN edge + SOA/Ethernet backbone with a zero-copy GPU tap), the raw feed and
+     HPC proof, fleet/campaign view, and the regulation mapping. Deliberately single dark
+     theme — an ops console reads as a lit screen in a dark room. */
+  :root{
+    --bg:#0a0f16; --panel:#111a24; --panel-2:#0e1620;
+    --line:#1e2b3a; --line-soft:#17222f;
+    --fg:#dbe6f1; --muted:#7f92a6; --faint:#56687c;
+    --accent:#2fd6c0; --accent-dim:#18b7a4;
+    --good:#45c26b; --warn:#e3b341; --crit:#f0585b; --crit-dim:#7a2730;
+    --soa:#5aa9f0;              /* backbone / service layer accent */
+    color-scheme: dark;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 22px;max-width:1280px;margin:0 auto}
+  a{color:var(--accent)}
+  .tnum{font-variant-numeric:tabular-nums}
+
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:linear-gradient(180deg,#0b121b,#0b121bf2);border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+  .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:11px;max-width:1280px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .logo{width:30px;height:30px;border-radius:7px;flex:none;background:radial-gradient(120% 120% at 30% 20%,#1b3a3a,#0d1a1a);border:1px solid #27534e;display:grid;place-items:center}
+  .logo svg{width:18px;height:18px}
+  .brand h1{font-size:15px;margin:0;letter-spacing:.3px;font-weight:600;white-space:nowrap}
+  .brand .sub{font-size:11px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+  .spacer{flex:1 1 20px}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .chip b{color:var(--fg);font-weight:600}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px #45c26b22}
+  .demo-badge{font-family:var(--mono);font-size:10.5px;letter-spacing:1.3px;color:#0a0f16;background:var(--warn);border-radius:5px;padding:3px 8px;font-weight:600;white-space:nowrap}
+  .clock{font-family:var(--mono);font-size:12.5px;color:var(--fg)}
+
+  .alert{display:flex;align-items:center;gap:12px;margin-top:14px;border-radius:11px;padding:11px 14px;border:1px solid var(--crit);background:linear-gradient(90deg,#1c0e13,#160c10);color:#ffd9da;font-size:13.5px}
+  .alert.hidden{display:none}
+  .alert .pulse{width:11px;height:11px;border-radius:50%;background:var(--crit);flex:none;animation:pulse 1.1s infinite}
+  .alert b{color:#fff}
+  .alert .tag{margin-left:auto;font-family:var(--mono);font-size:11px;color:#ffb4b6;border:1px solid var(--crit-dim);padding:3px 8px;border-radius:5px;white-space:nowrap}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 #f0585b88}70%{box-shadow:0 0 0 9px #f0585b00}100%{box-shadow:0 0 0 0 #f0585b00}}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 14px;min-width:0;position:relative;overflow:hidden}
+  .tile .k{font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+  .tile .v{font-family:var(--mono);font-size:26px;font-weight:600;margin-top:5px;letter-spacing:.5px}
+  .tile .u{font-size:12px;color:var(--faint);margin-left:3px;font-family:var(--sans)}
+  .tile .foot{font-size:11px;color:var(--faint);margin-top:3px}
+  .tile .foot b{color:var(--good)}
+  .sevbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+  .tile.t-crit .sevbar{background:var(--crit)} .tile.t-warn .sevbar{background:var(--warn)}
+
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-top:12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:0;display:flex;flex-direction:column}
+  .panel>.head{display:flex;align-items:center;gap:9px;padding:11px 14px 9px;border-bottom:1px solid var(--line-soft)}
+  .panel .head h2{font-size:12.5px;margin:0;font-weight:600;letter-spacing:.3px}
+  .panel .head .meta{margin-left:auto;font-size:11px;color:var(--faint);font-family:var(--mono)}
+  .panel .body{padding:12px 14px;min-width:0}
+  .c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+  canvas{display:block;width:100%}
+
+  .threatlvl{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .threatlvl .lvl{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.5px}
+  .lvl.ok{color:var(--good)}.lvl.el{color:var(--warn)}.lvl.cr{color:var(--crit)}
+  .threatlvl .ico{width:12px;height:12px;border-radius:50%}
+  .ico.ok{background:var(--good)}.ico.el{background:var(--warn)}.ico.cr{background:var(--crit)}
+
+  .clsrow{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12.5px}
+  .clsrow .nm{width:82px;flex:none;color:var(--muted)}
+  .clsrow .track{flex:1;height:8px;background:var(--panel-2);border-radius:5px;overflow:hidden;min-width:0}
+  .clsrow .fill{height:100%;border-radius:5px;transition:width .4s ease}
+  .clsrow .ct{width:30px;flex:none;text-align:right;font-family:var(--mono);color:var(--fg)}
+  .lyr{font-size:9px;font-family:var(--mono);border-radius:3px;padding:0 4px;margin-left:2px}
+  .lyr.edge{color:var(--accent);border:1px solid #1c3b38}
+  .lyr.bb{color:var(--soa);border:1px solid #244462}
+
+  .feedwrap{overflow-x:auto;max-height:290px;overflow-y:auto}
+  table.feed{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;white-space:nowrap}
+  table.feed th{position:sticky;top:0;background:var(--panel-2);color:var(--faint);font-weight:500;text-align:left;padding:6px 10px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--line-soft)}
+  table.feed td{padding:5px 10px;border-bottom:1px solid var(--line-soft);color:var(--fg)}
+  table.feed tr:first-child td{animation:flash .5s ease}
+  @keyframes flash{from{background:#1a2836}to{background:transparent}}
+  .verdict{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600}
+  .v-ok{color:var(--good)}.v-bad{color:var(--crit)}
+  .vd{width:6px;height:6px;border-radius:50%} .v-ok .vd{background:var(--good)}.v-bad .vd{background:var(--crit)}
+  .sc{color:var(--muted)}
+  .tr{font-size:10px;padding:0 5px;border-radius:3px}
+  .tr-can{color:var(--accent);background:#0c1816;border:1px solid #1c3b38}
+  .tr-soa{color:var(--soa);background:#0c1622;border:1px solid #244462}
+
+  table.flag{width:100%;border-collapse:collapse;font-size:12px}
+  table.flag td{padding:6px 4px;border-bottom:1px solid var(--line-soft)}
+  table.flag td.id{font-family:var(--mono);color:var(--fg)}
+  table.flag td.ec{color:var(--muted)}
+  table.flag td.n{text-align:right;font-family:var(--mono);color:var(--crit);font-weight:600}
+  .tag-sm{font-size:10px;font-family:var(--mono);color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:1px 5px;margin-left:6px}
+
+  .lat{display:flex;gap:8px;margin-bottom:10px}
+  .lat .cell{flex:1;background:var(--panel-2);border:1px solid var(--line-soft);border-radius:8px;padding:8px 9px;min-width:0}
+  .lat .cell .p{font-size:10.5px;color:var(--faint);font-family:var(--mono)}
+  .lat .cell .x{font-family:var(--mono);font-size:16px;font-weight:600;margin-top:2px}
+  .lat .cell .x small{font-size:11px;color:var(--faint);font-weight:400}
+
+  /* fleet grid */
+  .fleetgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-bottom:10px}
+  .fcell{aspect-ratio:1;border-radius:3px;background:#143024;border:1px solid #1d4530}
+  .fcell.bad{background:var(--crit);border-color:var(--crit);box-shadow:0 0 0 2px #f0585b33}
+  .fleet-cap{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  .fleet-cap b{color:var(--fg)} #fscope.camp{color:var(--crit);font-weight:600}
+
+  /* compliance */
+  .comp{display:flex;flex-direction:column;gap:8px}
+  .crow{display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line-soft)}
+  .crow:last-child{border-bottom:0}
+  .crow .reg{width:92px;flex:none;font-family:var(--mono);font-size:12px;color:var(--fg)}
+  .crow .reg small{display:block;color:var(--faint);font-size:10px;font-family:var(--sans);margin-top:1px;white-space:normal;line-height:1.3}
+  .crow .what{flex:1;font-size:12px;color:var(--muted);min-width:0;line-height:1.5}
+  .crow .st2{flex:none;font-size:10px;font-family:var(--mono);border-radius:5px;padding:3px 7px;align-self:center}
+  .st2.on{color:var(--good);border:1px solid #1e4a30;background:#0d1a12}
+  .st2.part{color:var(--warn);border:1px solid #4a3d16;background:#191407}
+
+  .cluster{background:#06090d;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;align-items:center;gap:16px;min-width:0}
+  .cluster .ring{width:62px;height:62px;border-radius:50%;flex:none;border:4px solid #16222e;border-top-color:var(--accent);border-right-color:var(--accent-dim);display:grid;place-items:center;font-family:var(--mono)}
+  .cluster .ring b{font-size:16px}.cluster .ring span{font-size:9px;color:var(--faint)}
+  .cluster .tell{min-width:0}
+  .cluster .tell .lamp{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--warn);font-weight:600}
+  .cluster .tell .lamp.off{color:var(--faint)}
+  .cluster .tell .lamp svg{width:16px;height:16px}
+  .cluster .tell p{margin:7px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+  .topo{width:100%;height:auto}
+  .topo text{font-family:var(--mono)}
+  .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:18px;height:3px;border-radius:2px;display:inline-block}
+
+  .note{font-size:11.5px;color:var(--faint);line-height:1.6;margin-top:16px;border-top:1px solid var(--line-soft);padding-top:12px}
+  .note b{color:var(--muted)}
+  .tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .tool{font-family:var(--mono);font-size:11px;color:var(--accent);border:1px solid #1c3b38;background:#0c1816;border-radius:5px;padding:3px 8px}
+
+  @media(max-width:880px){ .c4,.c5,.c6,.c7,.c8{grid-column:1/-1} .kpis{grid-template-columns:repeat(2,1fr)} }
+  @media(prefers-reduced-motion:reduce){ .alert .pulse{animation:none} table.feed tr:first-child td{animation:none} }
+</style>
+
+<header>
+  <div class="bar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#2fd6c0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z"/><path d="M9 12l2 2 4-4"/></svg>
+      </span>
+      <div style="min-width:0"><h1>GuardCAN</h1><div class="sub">Vehicle Security Operations Center</div></div>
+    </div>
+    <span class="demo-badge">SIMULATED DEMO</span>
+    <div class="spacer"></div>
+    <span class="chip"><span class="dot"></span>IDS <b>Online</b></span>
+    <span class="chip">Fleet <b id="k-fleet">248</b></span>
+    <span class="chip">Campaign <b id="k-camp" style="color:var(--good)">none</b></span>
+    <span class="chip">Alerts <b id="k-alerts" style="color:var(--crit)">0</b></span>
+    <span class="clock tnum" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="alert hidden" id="alert">
+    <span class="pulse"></span>
+    <span><b id="alert-type">Attack</b> detected — <span id="alert-desc">anomalous frames flagged by model</span></span>
+    <span class="tag" id="alert-tag">1 vehicle</span>
+  </div>
+
+  <div class="kpis">
+    <div class="tile" id="tile-fps"><span class="sevbar"></span>
+      <div class="k">Ingest throughput</div>
+      <div class="v tnum"><span id="k-fps">1.84</span><span class="u">M frames/s</span></div>
+      <div class="foot">GPU batch inference · CAN + SOA</div>
+    </div>
+    <div class="tile" id="tile-sp"><span class="sevbar"></span>
+      <div class="k">GPU speedup</div>
+      <div class="v tnum"><span id="k-sp">41</span><span class="u">× vs CPU</span></div>
+      <div class="foot">single-thread baseline</div>
+    </div>
+    <div class="tile" id="tile-lat"><span class="sevbar"></span>
+      <div class="k">Detection latency</div>
+      <div class="v tnum"><span id="k-p99">0.82</span><span class="u">ms p99</span></div>
+      <div class="foot">p50 <span id="k-p50" class="tnum">0.21</span> ms · line-rate</div>
+    </div>
+    <div class="tile" id="tile-f1"><span class="sevbar"></span>
+      <div class="k">Model accuracy</div>
+      <div class="v tnum"><span id="k-f1">0.991</span><span class="u">F1</span></div>
+      <div class="foot">autoencoder · Car-Hacking eval</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- anomaly timeline -->
+    <section class="panel c8">
+      <div class="head"><h2>Anomaly score — live</h2><span class="meta" id="win-meta">last 120 s</span></div>
+      <div class="body"><canvas id="chart" height="180"></canvas></div>
+    </section>
+
+    <!-- threat level + classification -->
+    <section class="panel c4">
+      <div class="head"><h2>Threat status</h2></div>
+      <div class="body">
+        <div class="threatlvl">
+          <span class="ico ok" id="lvl-ico"></span>
+          <span class="lvl ok" id="lvl-txt">NORMAL</span>
+          <span class="meta" style="margin-left:auto;font-family:var(--mono);color:var(--faint);font-size:11px" id="lvl-sub">baseline traffic</span>
+        </div>
+        <div style="font-size:11px;color:var(--faint);letter-spacing:.5px;text-transform:uppercase;margin:4px 0 2px">Detected by class (session)</div>
+        <div class="clsrow"><span class="nm">DoS flood<span class="lyr edge">CAN</span></span><span class="track"><span class="fill" id="cl-dos" style="background:var(--crit);width:2%"></span></span><span class="ct" id="ct-dos">0</span></div>
+        <div class="clsrow"><span class="nm">Fuzzing<span class="lyr edge">CAN</span></span><span class="track"><span class="fill" id="cl-fuz" style="background:var(--warn);width:2%"></span></span><span class="ct" id="ct-fuz">0</span></div>
+        <div class="clsrow"><span class="nm">Spoofing<span class="lyr edge">CAN</span></span><span class="track"><span class="fill" id="cl-spo" style="background:#e07a3f;width:2%"></span></span><span class="ct" id="ct-spo">0</span></div>
+        <div class="clsrow"><span class="nm">Replay<span class="lyr edge">CAN</span></span><span class="track"><span class="fill" id="cl-rep" style="background:#c65ad6;width:2%"></span></span><span class="ct" id="ct-rep">0</span></div>
+        <div class="clsrow"><span class="nm">SOA abuse<span class="lyr bb">SOA</span></span><span class="track"><span class="fill" id="cl-soa" style="background:var(--soa);width:2%"></span></span><span class="ct" id="ct-soa">0</span></div>
+      </div>
+    </section>
+
+    <!-- two-layer topology -->
+    <section class="panel c7">
+      <div class="head"><h2>In-vehicle network monitored</h2><span class="meta">edge + backbone</span></div>
+      <div class="body">
+        <svg class="topo" viewBox="0 0 600 236" role="img" aria-label="Two-layer in-vehicle network with GuardCAN tap">
+          <!-- backbone bus -->
+          <line id="bbBus" x1="63" y1="66" x2="325" y2="66" stroke="#35506b" stroke-width="2.5"/>
+          <line x1="65" y1="58" x2="65" y2="66" stroke="#35506b" stroke-width="2"/>
+          <line x1="195" y1="58" x2="195" y2="66" stroke="#35506b" stroke-width="2"/>
+          <line x1="323" y1="58" x2="323" y2="66" stroke="#35506b" stroke-width="2"/>
+          <!-- SoC boxes -->
+          <g font-size="9.5">
+            <rect x="22" y="24" width="86" height="34" rx="6" fill="#0e1620" stroke="#244462"/><text x="65" y="39" fill="#c3d2e2" text-anchor="middle">Renesas</text><text x="65" y="51" fill="#7f92a6" text-anchor="middle">R-Car</text>
+            <rect x="152" y="24" width="86" height="34" rx="6" fill="#0e1620" stroke="#244462"/><text x="195" y="39" fill="#c3d2e2" text-anchor="middle">Qualcomm</text><text x="195" y="51" fill="#7f92a6" text-anchor="middle">cockpit</text>
+            <rect x="282" y="24" width="86" height="34" rx="6" fill="#0e1620" stroke="#244462"/><text x="325" y="39" fill="#c3d2e2" text-anchor="middle">NVIDIA</text><text x="325" y="51" fill="#7f92a6" text-anchor="middle">Orin</text>
+          </g>
+          <text x="22" y="86" fill="#5aa9f0" font-size="9">Automotive Ethernet · SOME/IP · DDS · iceoryx2 zero-copy</text>
+
+          <!-- gateway -->
+          <line x1="195" y1="66" x2="195" y2="104" stroke="#35506b" stroke-width="2"/>
+          <rect x="140" y="104" width="110" height="30" rx="6" fill="#101d16" stroke="#2b5d46"/><text x="195" y="123" fill="#9fe8cf" font-size="10" text-anchor="middle">Zonal Gateway</text>
+          <line x1="195" y1="134" x2="195" y2="168" stroke="#35506b" stroke-width="2"/>
+
+          <!-- CAN bus -->
+          <line id="edgeBus" x1="63" y1="168" x2="325" y2="168" stroke="#2b5048" stroke-width="2.5"/>
+          <line x1="65" y1="168" x2="65" y2="176" stroke="#2b5048" stroke-width="2"/>
+          <line x1="195" y1="168" x2="195" y2="176" stroke="#2b5048" stroke-width="2"/>
+          <line x1="323" y1="168" x2="323" y2="176" stroke="#2b5048" stroke-width="2"/>
+          <g font-size="9.5">
+            <rect x="22" y="176" width="86" height="32" rx="6" fill="#0e1620" stroke="#1c3b38"/><text x="65" y="196" fill="#c3d2e2" text-anchor="middle">Engine ECU</text>
+            <rect x="152" y="176" width="86" height="32" rx="6" fill="#0e1620" stroke="#1c3b38"/><text x="195" y="196" fill="#c3d2e2" text-anchor="middle">ABS / ESP</text>
+            <rect x="282" y="176" width="86" height="32" rx="6" fill="#0e1620" stroke="#1c3b38"/><text x="325" y="196" fill="#c3d2e2" text-anchor="middle">Body Ctrl</text>
+          </g>
+          <text x="22" y="226" fill="#2fd6c0" font-size="9">CAN / CAN-FD (broadcast, unauthenticated)</text>
+
+          <!-- taps -->
+          <line id="tapBB" x1="325" y1="66" x2="432" y2="104" stroke="#5aa9f0" stroke-width="1.4" stroke-dasharray="4 4"/>
+          <line id="tapEdge" x1="325" y1="168" x2="432" y2="140" stroke="#2fd6c0" stroke-width="1.4" stroke-dasharray="4 4"/>
+          <circle id="tapDotBB" cx="325" cy="66" r="4" fill="#5aa9f0"/>
+          <circle id="tapDotEdge" cx="325" cy="168" r="4" fill="#2fd6c0"/>
+          <text x="352" y="92" fill="#7f92a6" font-size="8.5">zero-copy tap</text>
+
+          <!-- IDS engine -->
+          <rect id="idsBox" x="432" y="98" width="150" height="48" rx="8" fill="#0c1816" stroke="#2fd6c0"/>
+          <text x="507" y="118" fill="#9fe8cf" font-size="10.5" text-anchor="middle">GuardCAN</text>
+          <text x="507" y="132" fill="#7f92a6" font-size="9" text-anchor="middle">GPU IDS · CUDA streams</text>
+        </svg>
+        <div class="legend">
+          <span><i style="background:#2fd6c0"></i>CAN edge bus</span>
+          <span><i style="background:#5aa9f0"></i>SOA / Ethernet backbone</span>
+          <span><i style="background:#f0585b"></i>layer under attack</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- HPC latency -->
+    <section class="panel c5">
+      <div class="head"><h2>HPC engine · latency</h2><span class="meta">µ-batched</span></div>
+      <div class="body">
+        <div class="lat">
+          <div class="cell"><div class="p">p50</div><div class="x tnum"><span id="l-p50">0.21</span><small> ms</small></div></div>
+          <div class="cell"><div class="p">p99</div><div class="x tnum"><span id="l-p99">0.82</span><small> ms</small></div></div>
+          <div class="cell"><div class="p">p99.9</div><div class="x tnum"><span id="l-p999">1.40</span><small> ms</small></div></div>
+        </div>
+        <canvas id="hist" height="96"></canvas>
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);font-family:var(--mono);margin-top:4px"><span>0.1 ms</span><span>latency distribution</span><span>3 ms</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:11px;border-top:1px solid var(--line-soft);padding-top:9px">CUDA streams <b style="color:var(--fg)">8</b> · GPU util <b style="color:var(--fg)" id="k-util">73</b>% · pinned zero-copy host buffers</div>
+      </div>
+    </section>
+
+    <!-- live feed -->
+    <section class="panel c8">
+      <div class="head"><h2>Live frame &amp; service feed</h2><span class="meta">bus 0 · 500 kbit/s + Eth</span></div>
+      <div class="body" style="padding:0">
+        <div class="feedwrap">
+          <table class="feed">
+            <thead><tr><th>t (s)</th><th>ID</th><th>layer</th><th>payload / method</th><th>node</th><th>score</th><th>verdict</th></tr></thead>
+            <tbody id="feed"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- flagged IDs -->
+    <section class="panel c4">
+      <div class="head"><h2>Top flagged IDs</h2></div>
+      <div class="body" style="padding-top:4px">
+        <table class="flag"><tbody id="flagged"><tr><td class="id">—</td><td class="ec">waiting for anomalies…</td><td class="n"></td></tr></tbody></table>
+      </div>
+    </section>
+
+    <!-- fleet -->
+    <section class="panel c5">
+      <div class="head"><h2>Fleet view</h2><span class="meta">248 vehicles · sample</span></div>
+      <div class="body">
+        <div class="fleetgrid" id="fleetgrid"></div>
+        <div class="fleet-cap"><b id="fcount">248</b> monitored · <span id="fscope">all clear</span></div>
+      </div>
+    </section>
+
+    <!-- compliance -->
+    <section class="panel c7">
+      <div class="head"><h2>Regulation &amp; standard mapping</h2><span class="meta">why it exists</span></div>
+      <div class="body">
+        <div class="comp">
+          <div class="crow"><div class="reg">UN R155<small>Cybersecurity / CSMS</small></div><div class="what">Detect &amp; monitor attacks on vehicles in the field — the in-car IDS + this V-SOC.</div><div class="st2 on">addressed</div></div>
+          <div class="crow"><div class="reg">UN R156<small>Software updates / SUMS</small></div><div class="what">Secure OTA response — push a patched model or rule set after a confirmed campaign.</div><div class="st2 part">response loop</div></div>
+          <div class="crow"><div class="reg">ISO 26262<small>Functional safety</small></div><div class="what">Driver not distracted; detection is advisory and bounded-latency, safe states preserved.</div><div class="st2 part">by design</div></div>
+          <div class="crow"><div class="reg">ISO 42001<small>AI management</small></div><div class="what">Governance of the detection model — data lineage, human oversight, drift monitoring.</div><div class="st2 on">governed</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- driver cluster -->
+    <section class="panel c5">
+      <div class="head"><h2>What the driver sees</h2><span class="meta">in-cluster</span></div>
+      <div class="body">
+        <div class="cluster">
+          <div class="ring"><div style="text-align:center"><b class="tnum" id="spd">64</b><br><span>km/h</span></div></div>
+          <div class="tell">
+            <span class="lamp off" id="lamp">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              <span id="lamp-txt">All systems normal</span>
+            </span>
+            <p>Security detail is <b style="color:var(--muted)">not</b> shown to the driver — at most a generic service telltale. Full detail goes to the V-SOC. (UN R155 / ISO&nbsp;21434.)</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="note">
+    <b>About this view.</b> Mockup of the GuardCAN security operations console with simulated streaming data and injected attacks — not a live vehicle. CAN attack classes (DoS, fuzzing, RPM/gear spoofing) follow the public HCRL Car-Hacking dataset; SOA-abuse traffic is synthetic (SOME/IP / DDS). Throughput, speedup and latency figures are illustrative targets, not measured yet.
+    <div class="tools"><span class="tool">NVIDIA Morpheus</span><span class="tool">RAPIDS cuDF</span><span class="tool">TensorRT</span><span class="tool">Triton</span><span class="tool">CUDA streams</span><span class="tool">Nsight</span></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var BUS = [
+    {id:"0x0C9",ecu:"Engine ECU"},{id:"0x1F1",ecu:"ABS/ESP"},{id:"0x316",ecu:"Engine ECU"},
+    {id:"0x153",ecu:"ABS/ESP"},{id:"0x260",ecu:"Body Control"},{id:"0x2C0",ecu:"Instrument"},
+    {id:"0x4B0",ecu:"Gateway"},{id:"0x18DB33F1",ecu:"Telematics"}
+  ];
+  var SOA = [
+    {id:"svc 0x8001",op:"getStatus()",ecu:"ADAS→Cluster"},
+    {id:"svc 0x8003",op:"pub Telemetry",ecu:"Gateway→TCU"},
+    {id:"svc 0x8010",op:"sub LaneData",ecu:"R-Car→Qualcomm"},
+    {id:"svc 0x8022",op:"RPC setMode",ecu:"Orin→Gateway"}
+  ];
+  var ATTACKS = {
+    DoS:     {cls:"DoS",label:"DoS flood",      desc:"high-rate 0x000 saturating the CAN bus", id:"0x000", ecu:"— (spoofed)", layer:"edge", tr:"CAN"},
+    Fuzzing: {cls:"Fuzzing",label:"Fuzzing",    desc:"random IDs / payloads probing ECUs",      id:null,    ecu:"— (random)", layer:"edge", tr:"CAN"},
+    Spoofing:{cls:"Spoofing",label:"RPM spoofing",desc:"forged 0x0C9 engine frames (masquerade)",id:"0x0C9",ecu:"Engine ECU", layer:"edge", tr:"CAN"},
+    Replay:  {cls:"Replay",label:"Replay",      desc:"captured 0x153 frames re-sent",           id:"0x153", ecu:"ABS/ESP", layer:"edge", tr:"CAN"},
+    SOA:     {cls:"SOA",label:"SOA service abuse",desc:"spoofed SOME/IP service discovery / unauthorized subscribe", id:"SD 0xFF00", ecu:"— (rogue svc)", layer:"backbone", tr:"SOME/IP", op:"SD offer✕"}
+  };
+  var CKEYS = ["DoS","Fuzzing","Spoofing","Replay","SOA"];
+
+  var S = {
+    t:0, hist:[], thr:0.62, attack:null, idle:12,
+    counts:{DoS:0,Fuzzing:0,Spoofing:0,Replay:0,SOA:0},
+    alerts:0, flagged:{}, speed:64,
+    campaign:false, scope:1,
+    fleet:[]
+  };
+  var MAXH=120, MAXFEED=22, NFLEET=48;
+  for(var q=0;q<NFLEET;q++) S.fleet.push(false);
+
+  function rnd(a,b){return a+Math.random()*(b-a);}
+  function hex(n){var s=n.toString(16).toUpperCase();return s.length<2?"0"+s:s;}
+  function payload(){var o="";for(var i=0;i<8;i++){o+=(i?" ":"")+hex(Math.floor(Math.random()*256));}return o;}
+  function randId(){return "0x"+(Math.floor(Math.random()*0x7FF)).toString(16).toUpperCase();}
+  function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
+
+  var feedRows=[];
+
+  function buildFleet(){
+    var g=document.getElementById("fleetgrid"),h="";
+    for(var i=0;i<NFLEET;i++) h+="<div class='fcell' id='fc"+i+"'></div>";
+    g.innerHTML=h;
+  }
+  function renderFleet(){
+    for(var i=0;i<NFLEET;i++){
+      var el=document.getElementById("fc"+i); if(!el)continue;
+      if(S.fleet[i]) el.classList.add("bad"); else el.classList.remove("bad");
+    }
+    var fs=document.getElementById("fscope");
+    if(S.attack && S.campaign){ fs.textContent="coordinated campaign · "+S.scope+" vehicles"; fs.className="camp"; }
+    else if(S.attack){ fs.textContent="isolated · 1 vehicle"; fs.className=""; }
+    else { fs.textContent="all clear"; fs.className=""; }
+  }
+
+  function startAttack(){
+    var key=CKEYS[Math.floor(Math.random()*CKEYS.length)];
+    var dur=Math.floor(rnd(18,30));
+    S.attack={key:key,left:dur};
+    S.alerts++;
+    S.campaign = Math.random()<0.45;
+    S.scope = S.campaign ? Math.floor(rnd(4,14)) : 1;
+    // light up fleet
+    for(var i=0;i<NFLEET;i++) S.fleet[i]=false;
+    var hit = S.campaign ? Math.min(S.scope, NFLEET) : 1;
+    var picked=0;
+    while(picked<hit){ var r=Math.floor(Math.random()*NFLEET); if(!S.fleet[r]){S.fleet[r]=true;picked++;} }
+    var a=ATTACKS[key];
+    document.getElementById("alert").classList.remove("hidden");
+    set("alert-type",a.label); set("alert-desc",a.desc);
+    set("alert-tag", S.campaign ? (S.scope+" vehicles · campaign") : "1 vehicle");
+    set("k-camp", S.campaign ? (S.scope+" cars") : "none");
+    document.getElementById("k-camp").style.color = S.campaign ? "var(--crit)" : "var(--good)";
+  }
+  function endAttack(){
+    S.attack=null; S.idle=Math.floor(rnd(14,30));
+    S.campaign=false; S.scope=1;
+    for(var i=0;i<NFLEET;i++) S.fleet[i]=false;
+    document.getElementById("alert").classList.add("hidden");
+    set("k-camp","none"); document.getElementById("k-camp").style.color="var(--good)";
+  }
+
+  function pushFrame(){
+    var attacking = S.attack && Math.random()<0.72;
+    var row,score;
+    if(attacking){
+      var a=ATTACKS[S.attack.key];
+      var id = a.id || randId();
+      score = rnd(0.70,0.985);
+      row = {t:S.t,id:id,tr:a.tr,info:(a.tr==="CAN"?(S.attack.key==="DoS"?"00 00 00 00 00 00 00 00":payload()):(a.op||"svc call")),ecu:a.ecu,score:score,bad:true};
+      S.counts[a.cls]++;
+      var fk=id+"|"+a.tr;
+      if(!S.flagged[fk]) S.flagged[fk]={id:id,ecu:a.ecu,n:0,cls:a.label,tr:a.tr};
+      S.flagged[fk].n++;
+    } else {
+      if(Math.random()<0.78){
+        var b=BUS[Math.floor(Math.random()*BUS.length)];
+        score=rnd(0.02,0.30);
+        row={t:S.t,id:b.id,tr:"CAN",info:payload(),ecu:b.ecu,score:score,bad:false};
+      } else {
+        var s=SOA[Math.floor(Math.random()*SOA.length)];
+        score=rnd(0.02,0.28);
+        row={t:S.t,id:s.id,tr:"SOME/IP",info:s.op,ecu:s.ecu,score:score,bad:false};
+      }
+    }
+    feedRows.unshift(row); if(feedRows.length>MAXFEED) feedRows.pop();
+    return score;
+  }
+
+  function tick(){
+    S.t++;
+    if(S.attack){ S.attack.left--; if(S.attack.left<=0) endAttack(); }
+    else { S.idle--; if(S.idle<=0) startAttack(); }
+    var n = S.attack?3:(Math.random()<0.5?2:1);
+    var peak=0;
+    for(var i=0;i<n;i++){var sc=pushFrame(); if(sc>peak)peak=sc;}
+    peak=Math.max(peak,rnd(0.04,0.18));
+    if(S.attack) peak=Math.max(peak,rnd(0.72,0.97));
+    S.hist.push(peak); if(S.hist.length>MAXH) S.hist.shift();
+    updateKPIs(); renderFeed(); renderClasses(); renderFlagged(); renderThreat(); renderFleet(); updateTopo();
+    drawChart(); drawHist();
+  }
+
+  function updateKPIs(){
+    var load=S.attack?1:0;
+    var fps=rnd(1.72,1.97)+load*rnd(0.15,0.4);
+    var util=Math.round(rnd(68,79)+load*rnd(6,14));
+    var p50=rnd(0.18,0.25)+load*rnd(0,0.05);
+    var p99=rnd(0.74,0.9)+load*rnd(0.05,0.25);
+    var p999=p99+rnd(0.4,0.75);
+    set("k-fps",fps.toFixed(2)); set("k-util",Math.min(util,99)); set("k-sp",Math.round(rnd(38,44)));
+    set("k-p50",p50.toFixed(2)); set("k-p99",p99.toFixed(2)); set("k-f1",(rnd(0.988,0.993)).toFixed(3));
+    set("l-p50",p50.toFixed(2)); set("l-p99",p99.toFixed(2)); set("l-p999",p999.toFixed(2));
+    set("k-alerts",S.alerts);
+    S.speed+=rnd(-2,2); if(S.speed<0)S.speed=0; if(S.speed>130)S.speed=130; set("spd",Math.round(S.speed));
+    tileSev("tile-lat", p99>1.0?"warn":"");
+  }
+  function tileSev(id,cls){var el=document.getElementById(id);if(!el)return;el.classList.remove("t-crit","t-warn");if(cls==="crit")el.classList.add("t-crit");else if(cls==="warn")el.classList.add("t-warn");}
+
+  function renderFeed(){
+    var html="";
+    for(var i=0;i<feedRows.length;i++){
+      var r=feedRows[i];
+      var trc = r.tr==="CAN" ? "tr-can" : "tr-soa";
+      html+="<tr><td>"+(r.t*0.15).toFixed(2)+"</td><td>"+r.id+"</td><td><span class='tr "+trc+"'>"+r.tr+"</span></td><td>"+r.info+"</td><td>"+r.ecu+"</td><td class='sc'>"+r.score.toFixed(2)+"</td><td>"+
+        (r.bad?"<span class='verdict v-bad'><span class='vd'></span>THREAT</span>":"<span class='verdict v-ok'><span class='vd'></span>normal</span>")+"</td></tr>";
+    }
+    document.getElementById("feed").innerHTML=html;
+  }
+  function renderClasses(){
+    var c=S.counts, max=Math.max(1,c.DoS,c.Fuzzing,c.Spoofing,c.Replay,c.SOA);
+    bar("cl-dos","ct-dos",c.DoS,max); bar("cl-fuz","ct-fuz",c.Fuzzing,max);
+    bar("cl-spo","ct-spo",c.Spoofing,max); bar("cl-rep","ct-rep",c.Replay,max); bar("cl-soa","ct-soa",c.SOA,max);
+  }
+  function bar(fid,cid,v,max){document.getElementById(fid).style.width=Math.max(2,(v/max*100))+"%";document.getElementById(cid).textContent=v;}
+  function renderFlagged(){
+    var arr=[];
+    for(var k in S.flagged){if(S.flagged.hasOwnProperty(k))arr.push(S.flagged[k]);}
+    arr.sort(function(a,b){return b.n-a.n;}); arr=arr.slice(0,6);
+    if(!arr.length)return;
+    var html="";
+    for(var i=0;i<arr.length;i++){ html+="<tr><td class='id'>"+arr[i].id+"<span class='tag-sm'>"+arr[i].cls+"</span></td><td class='ec'>"+arr[i].ecu+"</td><td class='n'>"+arr[i].n+"</td></tr>"; }
+    document.getElementById("flagged").innerHTML=html;
+  }
+  function renderThreat(){
+    var ico=document.getElementById("lvl-ico"),txt=document.getElementById("lvl-txt"),sub=document.getElementById("lvl-sub"),lamp=document.getElementById("lamp"),lampt=document.getElementById("lamp-txt");
+    ico.className="ico "+(S.attack?"cr":"ok"); txt.className="lvl "+(S.attack?"cr":"ok");
+    if(S.attack){ txt.textContent="CRITICAL"; sub.textContent=ATTACKS[S.attack.key].label+(S.campaign?" · campaign":""); lamp.className="lamp"; lampt.textContent="Service: security check required"; tileSev("tile-f1","crit"); }
+    else { txt.textContent="NORMAL"; sub.textContent="baseline traffic"; lamp.className="lamp off"; lampt.textContent="All systems normal"; tileSev("tile-f1",""); }
+  }
+  function updateTopo(){
+    var edge=document.getElementById("edgeBus"), bb=document.getElementById("bbBus"), ids=document.getElementById("idsBox");
+    var layer = S.attack ? ATTACKS[S.attack.key].layer : null;
+    edge.setAttribute("stroke", layer==="edge" ? "#f0585b" : "#2b5048");
+    edge.setAttribute("stroke-width", layer==="edge" ? "3.2" : "2.5");
+    bb.setAttribute("stroke", layer==="backbone" ? "#f0585b" : "#35506b");
+    bb.setAttribute("stroke-width", layer==="backbone" ? "3.2" : "2.5");
+    ids.setAttribute("stroke", S.attack ? "#f0585b" : "#2fd6c0");
+  }
+
+  var chart=document.getElementById("chart"),cx=chart.getContext("2d");
+  var hist=document.getElementById("hist"),hx=hist.getContext("2d");
+  function fit(cv,ctx,cssH){var dpr=window.devicePixelRatio||1;var w=cv.clientWidth||300;cv.style.height=cssH+"px";cv.width=Math.max(1,Math.round(w*dpr));cv.height=Math.max(1,Math.round(cssH*dpr));ctx.setTransform(dpr,0,0,dpr,0,0);return {w:w,h:cssH};}
+  function mono(){return 'IBM Plex Mono, ui-monospace, monospace';}
+  function drawChart(){
+    var d=fit(chart,cx,180),w=d.w,h=d.h,pad=6; cx.clearRect(0,0,w,h);
+    cx.strokeStyle="#17222f";cx.lineWidth=1;
+    for(var g=0;g<=4;g++){var y=pad+(h-2*pad)*g/4;cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();}
+    var n=S.hist.length; if(n<2)return;
+    var stepX=w/(MAXH-1);
+    function X(i){return i*stepX;} function Y(v){return pad+(h-2*pad)*(1-v);}
+    var ty=Y(S.thr);
+    cx.setLineDash([4,4]);cx.strokeStyle="#e3b34188";cx.lineWidth=1;cx.beginPath();cx.moveTo(0,ty);cx.lineTo(w,ty);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle="#e3b341";cx.font="10px "+mono();cx.fillText("threshold "+S.thr.toFixed(2),4,ty-4);
+    var off=MAXH-n;
+    cx.beginPath();cx.moveTo(X(off),h);
+    for(var i=0;i<n;i++){cx.lineTo(X(off+i),Y(S.hist[i]));}
+    cx.lineTo(X(off+n-1),h);cx.closePath();
+    var grad=cx.createLinearGradient(0,0,0,h);grad.addColorStop(0,"#2fd6c055");grad.addColorStop(1,"#2fd6c003");cx.fillStyle=grad;cx.fill();
+    cx.lineWidth=1.8;
+    for(var j=0;j<n-1;j++){var v0=S.hist[j],v1=S.hist[j+1];cx.strokeStyle=(v1>=S.thr)?"#f0585b":"#2fd6c0";cx.beginPath();cx.moveTo(X(off+j),Y(v0));cx.lineTo(X(off+j+1),Y(v1));cx.stroke();}
+    var lv=S.hist[n-1];cx.fillStyle=(lv>=S.thr)?"#f0585b":"#2fd6c0";cx.beginPath();cx.arc(X(off+n-1),Y(lv),3,0,7);cx.fill();
+  }
+  var histBase=[3,7,15,26,20,12,7,4,3,2,1];
+  function drawHist(){
+    var d=fit(hist,hx,96),w=d.w,h=d.h,pad=4; hx.clearRect(0,0,w,h);
+    var load=S.attack?1:0,bars=histBase.length,bw=(w-(bars+1)*3)/bars,max=0,vals=[];
+    for(var i=0;i<bars;i++){var v=histBase[i]*(1+(Math.random()-0.5)*0.25)+(i>5?load*rnd(0,3):0);vals.push(v);if(v>max)max=v;}
+    for(var k=0;k<bars;k++){var bh=(h-2*pad)*(vals[k]/max),x=3+k*(bw+3),y=h-pad-bh;hx.fillStyle=k>=8?"#e3b341":(k>=6?"#2b8f85":"#2fd6c0");roundRect(hx,x,y,bw,bh,2);hx.fill();}
+    hx.strokeStyle="#f0585b";hx.setLineDash([3,3]);hx.lineWidth=1;var px=3+8*(bw+3);hx.beginPath();hx.moveTo(px,pad);hx.lineTo(px,h-pad);hx.stroke();hx.setLineDash([]);
+    hx.fillStyle="#f0585b";hx.font="9px "+mono();hx.fillText("p99",px+2,pad+9);
+  }
+  function roundRect(ctx,x,y,w,h,r){if(w<0)w=0;if(h<0)h=0;r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  function clock(){var n=new Date();function p(x){return x<10?"0"+x:x;}set("clock",p(n.getUTCHours())+":"+p(n.getUTCMinutes())+":"+p(n.getUTCSeconds())+" UTC");}
+
+  buildFleet();
+  for(var s=0;s<MAXH;s++) S.hist.push(rnd(0.05,0.2));
+  for(var f=0;f<MAXFEED;f++){pushFrame();S.t++;}
+  clock();drawChart();drawHist();renderFeed();renderClasses();renderThreat();renderFleet();updateTopo();
+  setInterval(clock,1000);
+  setInterval(tick, reduce?650:280);
+  window.addEventListener("resize",function(){drawChart();drawHist();});
+})();
+</script>

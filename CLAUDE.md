@@ -26,7 +26,8 @@ model/    autoencoder.py (torch + sklearn), train_autoencoder.py, train_classifi
 engine/   (Week 2) CUDA inference engine + memory-strategy benchmark
 soa/      (Week 3) synthetic SOME/IP + zero-copy tap
 serve/    (Week 4) TensorRT + Triton
-dashboard/(Week 3) V-SOC console
+dashboard/ V-SOC console: index.html (static, GitHub Pages) + replay_data.js from export_replay.py (replays
+          recorded HCRL test traffic with the real windowed events and per-frame alarms; aggregates only)
 docs/     architecture, compliance-mapping, threat-model, (Week 2) hpc-engine, windowed-detection
 data/     README (dataset download) + make_synthetic.py
 bench/    committed results: hcrl/ (HCRL metrics + charts, time_split/, epoch study, windowed/), hpc/ (engine, Nsight).
@@ -50,6 +51,8 @@ python -m model.eval              --data data/car-hacking --models models/ --out
 # windowed / event-level detection (time split only):
 python -m model.train_windowed --data data/car-hacking --out models/hcrl-time
 python -m model.eval_windowed  --data data/car-hacking --models models/hcrl-time --out bench/hcrl/windowed
+# V-SOC console data (needs the time-split models; checks itself against bench/hcrl/windowed/metrics.json):
+python -m dashboard.export_replay --data data/car-hacking --models models/hcrl-time --out dashboard/replay_data.js
 # a killed autoencoder run continues with --resume (checkpoint every 20 epochs in <out>/ae_checkpoint.pt)
 ```
 
@@ -63,6 +66,8 @@ python -m model.eval_windowed  --data data/car-hacking --models models/hcrl-time
 - **Windowed / event-level detection: done (time split).** `docs/windowed-detection.md`, `bench/hcrl/windowed/`.
   Per-ID 100 ms count envelope + 3-of-5 rule: all 358 test episodes (gear 89/89), latency p50 ~250 ms, 0 false
   events in 1,425 s of attack-free test time (95 % bound < 7.6/h; HCRL is too short to show ≤ 1/h).
+- **V-SOC console (replay): done.** `dashboard/` replays 5 test-part stretches (DoS, fuzzy, gear, RPM, 90 s
+  attack-free) with real detector output; one vehicle, no fleet view. `dashboard/README.md` has sources + Pages setup.
 
 ## Current focus — windowed / event-level detection
 
